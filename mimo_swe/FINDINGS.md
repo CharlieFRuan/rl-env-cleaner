@@ -170,3 +170,15 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - 19:55: 7 more 4 GB tasks -> 8 GB (total 83). Last fetch-ok flag (001838) also false: agent pointed git at a missing local path, real fetch failed DNS; NET_FAIL_RX extended. Interim: 2,370 tasks, pass@1 0.363, pass@4 0.632.
 - **Second broken task: 001225** (nop-r279): untouched repo passes its verifier (mocha, 16 passing) -> broken_nop.txt, excluded; its 4/4 scored "solves" were spurious. 20:50: 2,544 tasks complete, ~575 attempts left.
 - 21:25: 000148 agent OOM-killed at 4 GB -> 8 GB. 000797: agent's build filled the 10 GB disk (`No space left on device`) in 2 extra attempts; task already had 4 valid attempts, nothing re-queued.
+
+## Final (2026-10-06 22:45 UTC)
+- All 2,698 tasks processed: 2,697 with 4 valid attempts, 1 excluded as un-gradable (001226), 2 excluded as broken
+  (001597, 001225 pass with the nop agent). **n = 2,695 tasks: pass@1 0.362 (95% CI 0.348-0.375), pass@4 0.634
+  (0.615-0.652).** 10,852 trials, 10,796 valid, 56 infra (not counted; re-queued). Attempt outcomes on counted tasks:
+  6,722 wrong answer, 3,903 solved, 103 agent OOM, 38 step limit, 8 agent timeout, 4 agent crash, 2 context overflow.
+- Leakage: agent-phase allowlist held for the whole run (141 upstream fetch attempts, 0 succeeded; every flagged
+  trajectory read). Null-agent check covered all 1,710 solved tasks. 494 git-archaeology flags are commands like
+  `git log`/`git show` on ancestor history, which the build-time strip + assert guarantees is all that exists.
+- Not reviewed by me: the gate-forensics-r2 outputs (Claude Code auto mode blocked reading them); the build-time
+  assert enforces the git-leak properties those outputs measure.
+- Results: mimo_swe/results_qwen36/ (report.md, summary.json, attempts.jsonl, report_config.json, heavy_ids.txt, ...).

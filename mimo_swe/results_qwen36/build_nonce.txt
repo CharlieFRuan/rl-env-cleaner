@@ -1,0 +1,8 @@
+# tasks whose Daytona build cache was poisoned by a cancelled build (context canceled on every create)
+format-code-task-000574 1
+format-code-task-000722 1
+format-code-task-000902 1
+format-code-task-001249 1
+format-code-task-001540 1
+format-code-task-002155 1
+format-code-task-001095 1
