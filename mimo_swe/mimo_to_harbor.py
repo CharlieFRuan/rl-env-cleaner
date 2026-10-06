@@ -348,11 +348,14 @@ def main() -> None:
     ap.add_argument("--ids", default=None, help="comma-separated instance_ids")
     ap.add_argument("--agent-timeout", type=float, default=3600.0)
     ap.add_argument("--cpus", type=int, default=4)
-    ap.add_argument("--memory-mb", type=int, default=6144)
+    ap.add_argument("--memory-mb", type=int, default=4096)
     # MiMo k8s sandbox limit is 4 CPU / 8Gi; Daytona reserves the full request against a shared 500 GiB
     # org quota, so only JS/JVM verifiers get the full 8 GB.
     ap.add_argument("--heavy-memory-mb", type=int, default=8192)
     ap.add_argument("--storage-mb", type=int, default=10240)
+    # Tasks whose Daytona build cache entry is poisoned (a cancelled build cached under the Dockerfile
+    # hash -> every create fails with "context canceled"): a nonce comment gives them a fresh hash.
+    ap.add_argument("--nonce-file", default=None, help="lines: <instance_id> <nonce>")
     args = ap.parse_args()
 
     df = pd.read_parquet(args.parquet)
@@ -362,6 +365,13 @@ def main() -> None:
         rows = [r for r in rows if r["instance_id"] in wanted]
     if args.limit:
         rows = rows[: args.limit]
+
+    nonces = {}
+    if args.nonce_file and Path(args.nonce_file).exists():
+        for line in Path(args.nonce_file).read_text().splitlines():
+            if line.strip() and not line.startswith("#"):
+                k, v = line.split()[:2]
+                nonces[k] = v
 
     out = Path(args.out_dir)
     for r in rows:
@@ -383,7 +393,10 @@ def main() -> None:
             )
         )
         (d / "instruction.md").write_text(r["problem_statement"].strip() + f"\n\nThe repository is at `{cwd}`.\n")
-        (d / "environment" / "Dockerfile").write_text(DOCKERFILE.format(image=image, cwd=cwd, keep_build_env=int(uses_image_build_env(r["test_patch"]))))
+        dockerfile = DOCKERFILE.format(image=image, cwd=cwd, keep_build_env=int(uses_image_build_env(r["test_patch"])))
+        if iid in nonces:
+            dockerfile += f"# build-nonce: {nonces[iid]}\n"
+        (d / "environment" / "Dockerfile").write_text(dockerfile)
         (d / "environment" / "mimo_setup.sh").write_text(SETUP_SH)
         (d / "tests" / "test.patch").write_text(r["test_patch"])
         test_sh = d / "tests" / "test.sh"

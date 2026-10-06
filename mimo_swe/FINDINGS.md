@@ -41,3 +41,46 @@ Setup: mini-swe-agent 2.4.6 on Daytona, Qwen3.8-27B-FP8 (local vLLM, Cloudflare 
 - Test tampering: none found that affects grading (no conftest/skip/config edits to grader tests; deletions are the agent's own scratch tests; patch-touched files are reset before grading).
 - Network blocking in Harbor+Daytona: only all-or-nothing (`disable_internet`), no allowlist, no per-phase switch; mini-swe-agent runs inside the sandbox and needs the tunnel → can't simply turn internet off.
 - **Image forensics (jobs/forensics-r1, 237 images, nop agent)**: future commits reachable from refs in 63 (27%); dangling commits newer than base in 183 (77%); reflog entries 53; ORIG_HEAD 235; .build_env 28; test patch pre-applied 0; patch-added files pre-existing 0. → local git history is a major leak path; needs build-time strip (delete non-ancestor refs, ORIG_HEAD, stash, reflog expire, gc --prune=now) + assert.
+
+## Qwen3.6-35B-A3B BF16 run on GCP 4x8 B200 (2026-10-06)
+
+Setup: vLLM 0.31.0, 32 replicas (TP=1, one per GPU; model is 66 GiB BF16 so it fits one B200, and a 3B-active
+MoE gains little from TP), `--max-model-len 262144 --max-num-seqs 32`, MTP speculative decoding
+(`qwen3_next_mtp`, 2 tokens; mean acceptance length 2.2, ~450 tok/s single stream). vLLM startup per replica:
+`GPU KV cache size: 4,141,263 tokens`, `Maximum concurrency for 262,144 tokens per request: 15.80x`.
+Prefix-affinity router (`affinity_router.py`, rendezvous hash of system + first user message) -> Cloudflare quick tunnel.
+Sampling: model-card SWE-bench setting temperature 1.0, top_p 0.95, top_k 20 (generation_config), min_p 0,
+presence_penalty 0; `preserve_thinking` left at the Qwen3.6 template default (false). max_tokens 16384 (Cloudflare 125 s cap).
+step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 tasks), 10 GB disk.
+
+- **Anti-leak, implemented** (HANDOFF 4.3): MiMo `anti_hack_cleanup` ported into mimo_setup.sh; git history stripped
+  at build (non-ancestor refs, remotes, stash, notes, reflog, ORIG_HEAD etc., gc --prune=now) and the build FAILS if
+  `rev-list --all --not BASE` is non-empty or fsck finds an unreachable commit newer than BASE.
+  Agent-phase network: Daytona domain allowlist via `labeled_daytona.py` (`update_network_settings(domain_allow_list=<tunnel host>)`),
+  verified end to end through Harbor: during agent run github/pypi/npm/golang/crates/maven/gitlab, direct-IP HTTPS,
+  plain HTTP, DNS and `pip download` all fail; only the tunnel host answers. Verifier phase: public again (pip/npm OK).
+  Pitfall: `network_block_all=False` alone keeps the allowlist; clearing `domain_allow_list=""` restores public access.
+- **Build failure: broken `refs/remotes/origin/HEAD` symref** (gate-smoke-r1 001505 + 4 others): after the strip
+  deleted remote branches, the dangling symref made `git gc` fail ("bad object refs/remotes/origin/HEAD"). Fix: strip
+  drops `refs/remotes` wholesale and any loose ref that no longer resolves. Regenerated 06:47 UTC.
+- **Harbor host-side API key check**: Harbor's mini-swe-agent refuses to start unless OPENAI_API_KEY/MSWEA_API_KEY is
+  set in the *host* env (not only `--ae`). run_harbor.sh exports it.
+- **Retry policy**: Harbor's default retry set includes NonZeroAgentExitCodeError (context overflow, agent OOM); retrying
+  those would bias pass rates upward. Scored waves retry only SandboxBuildFailedError, EnvironmentStartTimeoutError,
+  HealthcheckError, AgentSetupTimeoutError. Endpoint failures inside the agent are classified infra by
+  `trial_status.py` (log regex) and the task's missing attempts are re-queued by `wave_loop.sh`.
+- **Behavioral consequence of the block**: agents that `pip install` helpers during the agent phase now fail to install
+  (e.g. smoke 001322 uninstalled the package and could not reinstall it). Same constraint for every attempt; left as is.
+- **Daytona org quota was the start-time bottleneck, not builds** (06:58 UTC): another org user held ~385 sandboxes
+  (398/500 vCPU, 416/500 GiB); our creates waited for quota. Audit log (`/api/audit/organizations/<org>`, filterable by
+  `from`/`to`) identifies actors by email + API-key suffix. Default sandbox memory lowered 6 -> 4 GB (8 GB kept for JS/JVM);
+  measured whole-sandbox peaks ~1.0-1.3 GB for Python/Go tasks. User then freed the org quota: ~72 concurrent sandboxes.
+- **Poisoned Daytona build cache -> "context canceled" on every create** (000574, 000722, 000902, 001249, 001540, 002155;
+  6/6 attempts each): these builds were in flight when gate-r1 was killed; the cancelled build stays cached under the
+  Dockerfile hash. Fix: `--nonce-file build_nonce.txt` appends `# build-nonce: N` to those Dockerfiles only (fresh hash;
+  other tasks' cached builds untouched). Lesson: never kill harbor mid-build without expecting this.
+- **Harbor leaves BUILD_FAILED sandboxes behind** (87 at 07:20): `cleanup_failed_builds.py` (labeled-ours only, logged)
+  runs every 10 min from `maintenance.sh`.
+- **First scored waves (07:05-07:25)**: leak scan of 274 trials: 1 real upstream fetch attempt (`pip download`), blocked
+  by the allowlist (connection errors). Null-agent: 19 solved tasks rerun with nop, all reward 0. Agent `command not
+  found` hits are missing convenience tools (hexdump/xxd), not verifier toolchains.
