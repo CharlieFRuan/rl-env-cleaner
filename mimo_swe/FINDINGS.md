@@ -144,3 +144,4 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
   re-read from excluded_infra.txt every reconcile): killed the runner's process group, moved its 74 in-flight trial
   dirs to jobs/killed-restart-1201/ (outside the scored glob; otherwise they would count as pending), deleted their
   74+ labeled scored sandboxes, restarted with a 160-worker pool (was 256; 183 idle workers seen).
+- 001095 build cache poisoned by the 12:01 runner restart (build in flight was cancelled -> 8/8 "context canceled"): build nonce added, infra attempts moved to jobs/superseded-poisoned-cache/, re-admitted (runner re-reads exclusions). Other tasks mid-build at the restart (000102, 000194, 002568) were unaffected.
