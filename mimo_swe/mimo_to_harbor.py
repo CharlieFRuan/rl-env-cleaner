@@ -322,6 +322,8 @@ fi
 rc=$?
 echo "verifier_returncode=$rc"
 echo "mimo_mem_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null) mimo_disk=$(df -k / | awk 'NR==2{{print $3"/"$2}}')"
+# CPU accounting for sizing: cumulative usage + throttling at the cpus limit (cgroup v2), and sandbox uptime
+echo "mimo_cpu_stat=$(tr '\n' ' ' < /sys/fs/cgroup/cpu.stat 2>/dev/null) mimo_cpu_max=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null | tr ' ' '/') mimo_uptime_s=$(cut -d' ' -f1 /proc/uptime) mimo_pid1_start_s=$(awk '{{print $22/100}}' /proc/1/stat 2>/dev/null)"
 [ $rc -eq 0 ] && echo 1 > /logs/verifier/reward.txt
 exit 0
 """

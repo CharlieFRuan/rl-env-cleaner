@@ -166,3 +166,4 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - 17:55: 16 more 4 GB tasks -> 8 GB (total promoted 65). Leak scan of 7,821 continuous trials: 401 upstream fetch attempts, 0 with fetched content. Interim: 2,016 tasks, pass@1 0.361, pass@4 0.636; excluded: 001597 (broken, nop passes), 001226 (verifier too slow).
 - 18:55: 11 more 4 GB tasks -> 8 GB (total 76).
 - 19:25: the report's 16 "upstream-fetch-ok" flags were all false positives (read each: git prints "Cloning into ..." then "Could not resolve host: github.com"; pip connection errors; empty curl output). make_report.py now requires no failure marker in the output. No successful upstream fetch anywhere so far.
+- 19:35: verifier now also logs cgroup cpu.stat (usage_usec, nr_throttled, throttled_usec), cpu.max and sandbox uptime, to size vCPU from data (only memory.peak was logged before; cgroup v2 has no CPU peak). Logging only: tests/ change, no rebuild, grading unchanged.
