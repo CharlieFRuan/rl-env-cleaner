@@ -110,4 +110,4 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
   2/4, 001921 1/4) whose own test suites need > 4 GB: scoring them at 4 GB would penalize the model for our resource
   choice. Fix: `--heavy-ids-file heavy_ids.txt` moves them to 8 GB; their 4 GB attempts moved to
   jobs/superseded-mem4gb/ (outside the scored glob) and all 4 attempts re-run at 8 GB (one setting per task).
-  Policy going forward: a 4 GB task with >= 2 agent OOMs gets the same treatment.
+  Policy going forward: any 4 GB task with an agent OOM gets the same treatment (checked each check-in).
