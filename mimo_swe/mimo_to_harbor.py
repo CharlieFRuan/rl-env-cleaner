@@ -102,6 +102,15 @@ esac
 if command -v apt-get >/dev/null 2>&1; then
   # Some images were saved mid-dpkg ("dpkg was interrupted ... run dpkg --configure -a", e.g. 001302).
   DEBIAN_FRONTEND=noninteractive dpkg --configure -a >/dev/null 2>&1 || true
+  # Packages whose postinst can never succeed in a container (e.g. typesense-server calls systemctl, 002899) stay
+  # half-configured, and every later `apt-get install` retries them and fails: disable their postinst and finish.
+  for p in $(dpkg --audit 2>/dev/null | awk '/^ [a-z0-9]/{print $1}'); do
+    echo "mimo_setup: package $p cannot be configured; disabling its postinst"
+    for s in /var/lib/dpkg/info/"$p".postinst /var/lib/dpkg/info/"$p":*.postinst; do
+      [ -f "$s" ] && mv "$s" "$s.mimo-disabled"
+    done
+    DEBIAN_FRONTEND=noninteractive dpkg --configure "$p" >/dev/null 2>&1 || true
+  done
   # deb822 stanzas with no (or an empty) URIs field make every apt command fail: drop them.
   for f in /etc/apt/sources.list.d/*.sources; do
     [ -f "$f" ] || continue

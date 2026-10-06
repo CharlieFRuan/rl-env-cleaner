@@ -180,7 +180,7 @@ class Scheduler:
         self.inflight_names: dict[asyncio.Future, str] = {}
         loop = asyncio.get_running_loop()
         pool = concurrent.futures.ProcessPoolExecutor(
-            max_workers=256, mp_context=multiprocessing.get_context("spawn"), max_tasks_per_child=1)
+            max_workers=160, mp_context=multiprocessing.get_context("spawn"), max_tasks_per_child=1)
         conf, last_conf, last_rec, other_running = read_conf(), 0.0, 0.0, 0
         while True:
             now = time.time()

@@ -134,3 +134,13 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
   are kept as infra per HANDOFF (retried; >= 6 -> excluded and listed). Agent OOM rate overall 43/2,423 (1.8%).
 - Interim 10:20: 605 tasks complete, pass@1 0.385, pass@4 0.673.
 - 000700 -> 8 GB tier (11:20; every 4 GB attempt peaked at the 4 GB ceiling, one verifier OOM). Interim 11:20: 780 tasks complete.
+- **Half-configured package with an unrunnable postinst** (002899, 8/8 agent installs exit 100): image ships
+  `typesense-server` half-configured; its postinst calls systemctl ("System has not been booted with systemd"), so
+  every `apt-get install` re-runs it and dpkg fails. Fix in mimo_setup.sh: after `dpkg --configure -a`, any package
+  `dpkg --audit` still lists gets its postinst moved to `*.mimo-disabled` and is configured. Verified by probe:
+  audit clean, `apt-get install -y curl build-essential git` rc=0. Regenerated 12:00.
+- 000755 (databricks/koalas, Spark JVM run via pytest; 6 verifier OOMs, all at the 4 GB ceiling) -> 8 GB tier.
+- **Controlled runner restart 12:01** to re-admit fixed tasks (001302, 000264, 000755, 002899; exclusions are now
+  re-read from excluded_infra.txt every reconcile): killed the runner's process group, moved its 74 in-flight trial
+  dirs to jobs/killed-restart-1201/ (outside the scored glob; otherwise they would count as pending), deleted their
+  74+ labeled scored sandboxes, restarted with a 160-worker pool (was 256; 183 idle workers seen).
