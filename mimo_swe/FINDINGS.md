@@ -145,3 +145,9 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
   dirs to jobs/killed-restart-1201/ (outside the scored glob; otherwise they would count as pending), deleted their
   74+ labeled scored sandboxes, restarted with a 160-worker pool (was 256; 183 idle workers seen).
 - 001095 build cache poisoned by the 12:01 runner restart (build in flight was cancelled -> 8/8 "context canceled"): build nonce added, infra attempts moved to jobs/superseded-poisoned-cache/, re-admitted (runner re-reads exclusions). Other tasks mid-build at the restart (000102, 000194, 002568) were unaffected.
+- **15 more 4 GB tasks promoted to 8 GB** (12:55): 000348, 000629, 001102, 002077 (4/4 agent OOMs), 002558 (3/4),
+  001594, 002502 (2/4), 000493, 000718, 000859, 001392, 001595, 002152, 002183, 002975 (1/4); sampled peaks sit
+  at the 4 GB ceiling. Earlier check-ins under-counted these: my ad-hoc sweep only grepped agent/verifier logs,
+  while the kill shows up as `exit code 137` in exception.txt (make_report.py's agent-oom class sees it). 59 4 GB
+  attempts superseded. Now 712 tasks at 8 GB (26%). Check-ins use report/attempts.jsonl agent-oom for this policy.
+- Interim 12:55: 1,070 tasks complete, pass@1 0.356, pass@4 0.637 (will shift as promoted tasks re-run).
