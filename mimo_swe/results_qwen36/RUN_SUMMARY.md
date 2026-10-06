@@ -32,12 +32,6 @@ Spec: `~/HANDOFF.md`. Code and results: `CharlieFRuan/rl-env-cleaner`, branch **
 - **Averages per attempt:** 75.6 steps, 2.9 M input tokens, 21 k output tokens.
 - **Per-attempt JSONL:** `mimo_swe/results_qwen36/attempts.jsonl`. Each line has task, attempt, reward, error class, steps, tokens and leak flags.
 
-- **Coverage:** 2,697 tasks with at least 1 valid attempt; 2,697 with all 4 (001226 never completed).
-- **Infra errors (not counted, re-queued):** no-verdict 51, verifier-oom 5.
-- **Automatic leak flags (all trials, review aids, not exclusions):** git archaeology 494, upstream fetch attempt 141, upstream fetch succeeded 0.
-  - "Git archaeology" means `git log` / `git show` style commands. The build-time strip and assert guarantee only ancestor history exists, so these can't reach the fix.
-  - Every fetch flagged as a possible success during the run was read by hand and turned out to be a failure.
-
 ## Setup
 
 **Serving.**
@@ -66,29 +60,6 @@ Spec: `~/HANDOFF.md`. Code and results: `CharlieFRuan/rl-env-cleaner`, branch **
   - All 4 attempts of a promoted task re-run at 8 GB, and its 4 GB attempts are superseded. Each task is scored under one setting.
 - Sandboxes carry labels (`owner/run/purpose`) and a 6 h TTL.
 - Concurrency was 68–74, using the full org quota after you approved it.
-
-### Exact config (`results_qwen36/report_config.json`)
-
-```json
-{
- "model": "Qwen/Qwen3.6-35B-A3B (BF16)",
- "served_name": "qwen3.6-35b-a3b",
- "vllm": "0.31.0; 32 replicas TP=1 DP=32 (4 nodes x 8 B200); --max-model-len 262144 --max-num-seqs 32 --enable-prefix-caching --language-model-only --reasoning-parser qwen3 --enable-auto-tool-choice --tool-call-parser qwen3_coder --speculative-config {method: qwen3_next_mtp, num_speculative_tokens: 2}; KV cache 4,141,263 tokens/replica, 15.80x at 262k",
- "router": "prefix-affinity (rendezvous hash of system+first user msg) -> Cloudflare quick tunnel",
- "sampling": "temperature 1.0, top_p 0.95, top_k 20, min_p 0, presence_penalty 0, max_tokens 16384, preserve_thinking template default (false)",
- "agent": "Harbor built-in mini-swe-agent, mini-swe-agent 2.4.6, step_limit 250, environment.timeout 600, agent timeout 3600 s",
- "harbor": "laude-institute/harbor@3de07a0e01f3368921766437fc7afece3ddec23d (0.13.1), Daytona SDK 0.220.0",
- "sandbox": "4 CPU, 10240 MB disk; memory 4096 MB default, 8192 MB for 770 tasks: JS/JVM verifiers (heuristic, 686) + 85 tasks promoted after an OOM at 4 GB (all their attempts re-run at 8 GB; 4 GB attempts superseded, see heavy_ids.txt); labels owner/run/purpose; ttl 360 min",
- "concurrency": "68-74 Daytona sandboxes + 4 null-agent; continuous trial-level scheduler (continuous_runner.py) after 07:50 UTC, harbor-run waves before",
- "network": "agent phase: Daytona domain allowlist = tunnel host only; agent install + verifier phases public",
- "anti_leak": "MiMo anti_hack_cleanup ported; git history stripped + build-time assert (no non-ancestor or newer dangling commits)",
- "task_order": "random.Random(20261006).shuffle(sorted task ids)",
- "n_attempts": 4,
- "retries": "Harbor -r 2 only for SandboxBuildFailedError/EnvironmentStartTimeoutError/HealthcheckError/AgentSetupTimeoutError; endpoint errors re-queued; tasks with >=6 infra attempts excluded",
- "run_window_utc": "2026-10-06 07:05 - 22:45",
- "excluded": "001597, 001225 (pass with nop agent); 001226 (verifier exceeds its own 1800 s timeout untouched)"
-}
-```
 
 ## Anti-leak measures (HANDOFF §4)
 1. **MiMo `anti_hack_cleanup` ported** into `mimo_setup.sh`, the build step: it purges build residue, build artifacts and global caches.
@@ -152,13 +123,13 @@ Full evidence for each item is in `FINDINGS.md`.
 | `nop_check.sh` | Null-agent rerun of every solved task; writes `broken_nop.txt`. |
 | `supersede_mem4.py` | Moves 4 GB attempts of tasks promoted to 8 GB out of the scored set. |
 | `cleanup_failed_builds.py`, `sandbox_janitor.py`, `maintenance.sh` | Sandbox hygiene (our labels only, every deletion logged). |
-| `make_report.py` | Regenerates `summary.json`, `attempts.jsonl` and a short `report.md` (its contents are folded into this file) (pass@k with bootstrap CIs, exclusions, failure classes, leak flags). |
+| `make_report.py` | Produces `report.md`, `summary.json` and `attempts.jsonl` (pass@k with bootstrap CIs, exclusions, failure classes, leak flags). |
 | `audit.py`, `scan_traces.py` | Verifier-outcome audit and trajectory leak / env-error scan. |
 | `FINDINGS.md` | Full log of issues: symptom, evidence path, fix, rerun result. |
-| `results_qwen36/` | This summary, `summary.json`, `attempts.jsonl`, `report_config.json`, `heavy_ids.txt`, `build_nonce.txt`, exclusion lists, seeded task order. |
+| `results_qwen36/` | Final report, `summary.json`, `attempts.jsonl`, `report_config.json`, `heavy_ids.txt`, `build_nonce.txt`, exclusion lists, seeded task order. |
 
 **Suggested reading order:**
-1. This file (`results_qwen36/RUN_SUMMARY.md`)
+1. `results_qwen36/report.md`
 2. `FINDINGS.md`, the "Qwen3.6" section onward
 3. `mimo_to_harbor.py`: `SETUP_SH` and `TEST_SH`
 4. `labeled_daytona.py`
