@@ -162,3 +162,4 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
   excluded from the headline by make_report.py. Scored attempts had 3/4 "solves", all spurious.
 - 001226 (4 GB): 6/6 attempts hit VerifierTimeoutError (1800 s) with no verifier output captured; diagnostic
   probe (nop agent, real verifier under an inner 1500 s timeout + memory monitor) running as jobs/probe-1226.
+- **001226 excluded (cannot be graded in time)**: probe with nop agent: `pytest cortex/tests/test_dataset.py` passes test after test but several tests take 5-6 min each (pycortex surface computation, CPU-bound on 4 vCPU, ~1 GB RAM); the untouched suite exceeds the task's own 1800 s verifier timeout (inner 1500 s cap hit at 87%). Possibly a precomputed cache removed by the ported MiMo cleanup (same cleanup as MiMo's harness). Left in excluded_infra.txt with this reason.
