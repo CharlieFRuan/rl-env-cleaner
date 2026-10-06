@@ -41,7 +41,10 @@ def steps(trial: str):
     f = os.path.join(trial, "agent", "mini-swe-agent.trajectory.json")
     if not os.path.exists(f):
         return
-    msgs = json.load(open(f)).get("messages", [])
+    try:
+        msgs = json.load(open(f)).get("messages", [])
+    except (json.JSONDecodeError, OSError):  # trajectory still being written
+        return
     pending = []
     for m in msgs:
         if m.get("role") == "assistant":
