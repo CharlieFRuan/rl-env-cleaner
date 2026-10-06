@@ -157,3 +157,8 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - 14:50: 000809 and 001235 now 4/4 valid; no exclusions. New rare infra: sandbox vanished on Daytona's side before the post-agent network restore (`update_network_settings ... Sandbox ... not found`, 2/~2,250 trials, after agent TimeoutError); retried as infra, no fix needed.
 - 15:25: 13 more 4 GB tasks -> 8 GB (001733, 001740 4/4; 002842 3/4; others 1-2/4). Promoted total 47. Interim: 1,546 tasks, pass@1 0.359, pass@4 0.635; no exclusions.
 - 15:55: OOMs that kill the agent or the whole sandbox at 4 GB end as infra (no verdict) and were invisible to the report-based sweep (it sees valid attempts only). Infra sweep (exception.txt: exit 137 / SANDBOX_NOT_RUNNING) found 002431, 000108 (peaks at the 4 GB ceiling; 000108's earlier verifier timeouts were likely memory pressure) -> 8 GB. Check-ins now sweep both.
+- **First broken task: 001597** (nop-r211): its verifier passes on the untouched repo (targeted Go tests in
+  istio pilot/pkg/model pass; the patch's new file is an e2e test not in the run) -> listed in broken_nop.txt and
+  excluded from the headline by make_report.py. Scored attempts had 3/4 "solves", all spurious.
+- 001226 (4 GB): 6/6 attempts hit VerifierTimeoutError (1800 s) with no verifier output captured; diagnostic
+  probe (nop agent, real verifier under an inner 1500 s timeout + memory monitor) running as jobs/probe-1226.
