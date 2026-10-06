@@ -29,7 +29,8 @@ UPSTREAM_RX = re.compile(
 NET_OK_RX = re.compile(r"HTTP/\S+ 200|Cloning into|Receiving objects|Saved to|Successfully downloaded|\bdiff --git\b", re.I)
 # "Cloning into ..." is printed before git fails; only count a fetch as OK when no failure marker follows.
 NET_FAIL_RX = re.compile(r"Could not resolve|unable to access|Failed to connect|NewConnectionError|Connection refused|"
-                         r"Network is unreachable|timed out|Temporary failure in name resolution|did not run successfully", re.I)
+                         r"Network is unreachable|timed out|Temporary failure in name resolution|did not run successfully|"
+                         r"Could not read from remote repository|does not appear to be a git repository", re.I)
 GIT_ARCH_RX = re.compile(r"\bgit\s+(show|log|reflog|checkout|cat-file|rev-list|fsck|stash\s+show|branch\s+-a|tag)\b")
 
 
