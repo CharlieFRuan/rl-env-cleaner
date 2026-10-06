@@ -111,3 +111,15 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
   choice. Fix: `--heavy-ids-file heavy_ids.txt` moves them to 8 GB; their 4 GB attempts moved to
   jobs/superseded-mem4gb/ (outside the scored glob) and all 4 attempts re-run at 8 GB (one setting per task).
   Policy going forward: any 4 GB task with an agent OOM gets the same treatment (checked each check-in).
+- **Agent install apt failures (exit 100), 2 tasks excluded then fixed** (09:30):
+  001302 `E: dpkg was interrupted, you must manually run 'dpkg --configure -a'` (image saved mid-dpkg);
+  000264 `E: Malformed entry 1 in sources file /etc/apt/sources.list.d/ubuntu.sources (URI)` (our own Xiaomi-mirror
+  sed deleted a deb822 stanza's URIs line but left the stanza). Fix in mimo_setup.sh: drop whole deb822 stanzas that
+  point at apt.sys.srv/xiaomi, drop stanzas with no/empty URIs, run `dpkg --configure -a` at build. Verified by
+  probe build of both images: `apt-get update` and `apt-get install -y curl build-essential git` rc=0.
+  Regenerated all tasks 09:35 (setup change -> new build hash; apt-config only, grading unchanged). Their 15 infra
+  attempts moved to jobs/superseded-aptfix/; re-admitted at the next runner restart (excluded_infra.txt is now
+  re-read every reconcile in the source; the running process predates that change).
+- 4 GB-tier quarantine corrected: the 11 re-runs of 002405/000243/001921 that started after the 08:51 regeneration
+  ran at 8 GB (peaks 8.1 GB / 7.3 GB, confirming the move) and are scored; only the 12 pre-regeneration 4 GB
+  attempts are in jobs/superseded-mem4gb/.

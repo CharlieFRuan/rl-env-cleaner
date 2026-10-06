@@ -77,6 +77,11 @@ KEEP_BUILD_ENV="${2:-0}"
 
 # 1. apt points at Xiaomi's internal mirror (apt.sys.srv): use the public archives instead.
 rm -f /etc/apt/sources.list.d/xiaomi.sources /etc/apt/sources.list.d/xiaomi.list
+# deb822 .sources files: drop whole stanzas pointing at the internal mirror (deleting only their URIs line
+# leaves a stanza without URIs -> "Malformed entry ... (URI)" and apt-get fails, e.g. 000264).
+for f in $(grep -rl 'apt\.sys\.srv/xiaomi' /etc/apt --include='*.sources' 2>/dev/null); do
+  awk 'BEGIN{RS=""; ORS="\n\n"} !/apt\.sys\.srv\/xiaomi/' "$f" > "$f.mimo" && mv "$f.mimo" "$f"
+done
 for f in $(grep -rl 'apt\.sys\.srv' /etc/apt 2>/dev/null); do
   sed -i -e '/apt\.sys\.srv\/xiaomi/d' \
          -e 's#http://apt\.sys\.srv/ubuntu#http://archive.ubuntu.com/ubuntu#g' \
@@ -95,6 +100,13 @@ esac
 # Third-party repos baked into some images fail `apt-get update` (missing/rotated signing key,
 # gone Release file), which fails the agent's install step. Disable those sources.list.d entries.
 if command -v apt-get >/dev/null 2>&1; then
+  # Some images were saved mid-dpkg ("dpkg was interrupted ... run dpkg --configure -a", e.g. 001302).
+  DEBIAN_FRONTEND=noninteractive dpkg --configure -a >/dev/null 2>&1 || true
+  # deb822 stanzas with no (or an empty) URIs field make every apt command fail: drop them.
+  for f in /etc/apt/sources.list.d/*.sources; do
+    [ -f "$f" ] || continue
+    awk 'BEGIN{RS=""; ORS="\n\n"} /(^|\n)URIs:[ \t]*[^ \t\n]/' "$f" > "$f.mimo" && mv "$f.mimo" "$f"
+  done
   out=$(apt-get update 2>&1 || true)
   for url in $(echo "$out" | grep -E "^(E|W):" | grep -E "NO_PUBKEY|EXPKEYSIG|not signed|does not have a Release file|is no longer signed|404" \
                | grep -oE "https?://[^ ']+" | sed -E 's#^(https?://[^/]+).*#\1#' | sort -u); do

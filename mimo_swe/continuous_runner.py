@@ -141,6 +141,10 @@ class Scheduler:
         return [str(TRIALS_DIR / n) for n in self.inflight_names.values()] if hasattr(self, "inflight_names") else []
 
     def reconcile(self) -> int:
+        # excluded_infra.txt is the source of truth (a fixed task is re-admitted by deleting its line
+        # and moving its infra trial dirs out of jobs/wave-*)
+        f = HERE / "excluded_infra.txt"
+        self.excluded = {l.split()[0] for l in f.read_text().splitlines() if l.strip()} if f.exists() else set()
         valid, infra, pending, other_running = self.scan()
         inflight = collections.Counter(self.inflight.values())
         new_excl = [t for t in self.order if infra[t] >= MAX_INFRA and valid[t] < N_ATTEMPTS and t not in self.excluded]
