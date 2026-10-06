@@ -133,3 +133,4 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - 8 GB-tier verifier OOMs (002988, 002318) and verifier timeouts after an agent left a hanging `go test` (000108)
   are kept as infra per HANDOFF (retried; >= 6 -> excluded and listed). Agent OOM rate overall 43/2,423 (1.8%).
 - Interim 10:20: 605 tasks complete, pass@1 0.385, pass@4 0.673.
+- 000700 -> 8 GB tier (11:20; every 4 GB attempt peaked at the 4 GB ceiling, one verifier OOM). Interim 11:20: 780 tasks complete.
