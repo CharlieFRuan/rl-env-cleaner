@@ -151,3 +151,4 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
   while the kill shows up as `exit code 137` in exception.txt (make_report.py's agent-oom class sees it). 59 4 GB
   attempts superseded. Now 712 tasks at 8 GB (26%). Check-ins use report/attempts.jsonl agent-oom for this policy.
 - Interim 12:55: 1,070 tasks complete, pass@1 0.356, pass@4 0.637 (will shift as promoted tasks re-run).
+- 13:55: 7 more 4 GB tasks -> 8 GB (000347, 001451 4/4; 001726, 001895, 002957 2/4; 001573, 002925 1/4). Promoted so far: 34 tasks. Leak scan of 4,682 continuous trials: 258 upstream fetch attempts, 0 with evidence of fetched content. Interim: 1,242 tasks, pass@1 0.352, pass@4 0.630.
