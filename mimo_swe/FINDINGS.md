@@ -126,3 +126,10 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - **Verifier OOM at 4 GB: 000211** (09:47; `python -m unittest` Killed, rc 137, cgroup peak 4.29 GB): moved to the 8 GB
   tier per the policy above (heavy_ids.txt); its 4 GB attempts moved to jobs/superseded-mem4gb/ (the one in flight is
   moved by a watcher when it finishes, logs/superseded_moves.log); all 4 attempts re-run at 8 GB.
+- **More 4 GB OOM tasks** (10:20): 000642, 001596, 002813 (4/4 agent OOMs), 002805, 003034 (3/4) -> 8 GB tier. The
+  JS/JVM heuristic misses some Python/Go/C++ suites that need > 4 GB (~0.4% of tasks so far). Automated:
+  heavy_ids.txt now records `since=<regeneration time>` per task and `supersede_mem4.py` (loop every 2 min) moves any
+  finished attempt that started before `since` (ran at 4 GB) to jobs/superseded-mem4gb/ (36 attempts so far).
+- 8 GB-tier verifier OOMs (002988, 002318) and verifier timeouts after an agent left a hanging `go test` (000108)
+  are kept as infra per HANDOFF (retried; >= 6 -> excluded and listed). Agent OOM rate overall 43/2,423 (1.8%).
+- Interim 10:20: 605 tasks complete, pass@1 0.385, pass@4 0.673.
