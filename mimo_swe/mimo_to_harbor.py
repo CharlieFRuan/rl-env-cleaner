@@ -123,6 +123,13 @@ if command -v apt-get >/dev/null 2>&1; then
       echo "mimo_setup: disabling $f ($url fails apt-get update)"; mv "$f" "$f.disabled"
     done
   done
+  # Images saved with unmet dependencies (e.g. 000809: libevent-dev) make every `apt-get install` fail
+  # ("Unmet dependencies. Try 'apt --fix-broken install'"): repair once at build.
+  if ! apt-get check >/dev/null 2>&1; then
+    echo "mimo_setup: apt-get check fails; running apt-get -f install"
+    apt-get update >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get -f install -y >/dev/null 2>&1 || true
+  fi
 fi
 
 # 2. Toolchain env lost in flattening. Sourced by login shells (profile.d) and non-login bash (BASH_ENV).
