@@ -123,3 +123,6 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - 4 GB-tier quarantine corrected: the 11 re-runs of 002405/000243/001921 that started after the 08:51 regeneration
   ran at 8 GB (peaks 8.1 GB / 7.3 GB, confirming the move) and are scored; only the 12 pre-regeneration 4 GB
   attempts are in jobs/superseded-mem4gb/.
+- **Verifier OOM at 4 GB: 000211** (09:47; `python -m unittest` Killed, rc 137, cgroup peak 4.29 GB): moved to the 8 GB
+  tier per the policy above (heavy_ids.txt); its 4 GB attempts moved to jobs/superseded-mem4gb/ (the one in flight is
+  moved by a watcher when it finishes, logs/superseded_moves.log); all 4 attempts re-run at 8 GB.
