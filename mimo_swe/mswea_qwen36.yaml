@@ -1,0 +1,20 @@
+# Overrides layered on mini-swe-agent's builtin mini.yaml (harbor passes `-c mini -c <this>`).
+agent:
+  # MiMo's harness used 500, the prototype 150; with 262k context 250 is a reasonable middle.
+  step_limit: 250
+  cost_limit: 0
+environment:
+  timeout: 600
+model:
+  model_kwargs:
+    drop_params: true
+    # Qwen3.6 model card, SWE-bench setting: temperature 1.0, top_p 0.95 (+ top_k 20 from generation_config).
+    # preserve_thinking stays at the template default (false): only the latest turn's <think> is kept.
+    temperature: 1.0
+    top_p: 0.95
+    # One reply must finish inside Cloudflare's 125 s response timeout; measured ~450 tok/s single-stream
+    # (MTP), so 16k leaves margin for load and prefill.
+    max_tokens: 16384
+    extra_body:
+      top_k: 20
+      min_p: 0.0

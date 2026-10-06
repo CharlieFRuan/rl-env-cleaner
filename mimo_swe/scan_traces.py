@@ -11,7 +11,8 @@ import re
 import sys
 from collections import Counter, defaultdict
 
-ROOT = "/mnt/cluster_storage/charlie/harbor/mimo/jobs"
+ROOT = os.environ.get("MIMO_JOBS", "/home/charlieruan/mimo/jobs")
+GLOB = os.environ.get("MIMO_TRIAL_GLOB", "*/format-code-task-*")
 
 CMD_RULES = {
     # looking for the reference fix in history / refs / objects
@@ -56,7 +57,7 @@ def steps(trial: str):
 
 def main() -> None:
     hits = []
-    for trial in sorted(glob.glob(f"{ROOT}/smoke-b*/format-code-task-*")):
+    for trial in sorted(glob.glob(f"{ROOT}/{GLOB}")):
         rf = os.path.join(trial, "verifier", "reward.txt")
         reward = open(rf).read().strip() if os.path.exists(rf) else "-"
         tid = "/".join(trial.split("/")[-2:])
@@ -77,7 +78,7 @@ def main() -> None:
         by_cat[h["cat"]].add(h["trial"])
         if h["reward"] == "1":
             by_cat_solved[h["cat"]].add(h["trial"])
-    n_trials = len(glob.glob(f"{ROOT}/smoke-b*/format-code-task-*"))
+    n_trials = len(glob.glob(f"{ROOT}/{GLOB}"))
     print(f"trials scanned: {n_trials}")
     for cat in list(CMD_RULES) + list(OUT_RULES):
         print(f"{cat:20s} trials={len(by_cat[cat]):4d}  of which solved={len(by_cat_solved[cat]):4d}  hits={sum(1 for h in hits if h['cat']==cat)}")

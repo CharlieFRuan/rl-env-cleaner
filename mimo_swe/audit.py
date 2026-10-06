@@ -10,7 +10,8 @@ import os
 import re
 import sys
 
-ROOT = "/mnt/cluster_storage/charlie/harbor/mimo/jobs"
+ROOT = os.environ.get("MIMO_JOBS", "/home/charlieruan/mimo/jobs")
+GLOB = os.environ.get("MIMO_TRIAL_GLOB", "*/format-code-task-*")
 SUSPECT = [  # (label, regex on verifier stdout) — infra-shaped failures, checked in order
     ("verifier-oom", r"^Killed$|verifier_returncode=137"),
     ("patch-failed", r"apply_test_patch_failed|error: patch failed|^error: \S+: patch does not apply|already exists in working directory"),
@@ -52,7 +53,7 @@ def classify(trial: str) -> tuple[str, str]:
 
 def main() -> None:
     rows = []
-    for trial in sorted(glob.glob(f"{ROOT}/smoke-b*/format-code-task-*")):
+    for trial in sorted(glob.glob(f"{ROOT}/{GLOB}")):
         cls, detail = classify(trial)
         rows.append((trial.split("/")[-2], trial.split("/")[-1].split("__")[0], cls, detail))
     counts: dict[str, int] = {}

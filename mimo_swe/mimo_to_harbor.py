@@ -40,6 +40,10 @@ timeout_sec = {verifier_timeout}
 
 [agent]
 timeout_sec = {agent_timeout}
+# Agent phase: only the model endpoint is reachable (answer-leak prevention, HANDOFF 4.3).
+# The run adds the endpoint host with --allow-agent-host; the placeholder keeps the list non-empty.
+network_mode = "allowlist"
+allowed_hosts = ["model-endpoint.invalid"]
 
 [environment]
 network_mode = "public"
@@ -60,14 +64,16 @@ DOCKERFILE = """FROM {image}
 ENV PATH=/usr/local/go/bin:/go/bin:/root/go/bin:/usr/local/cargo/bin:/root/.cargo/bin:/opt/java/openjdk/bin:/usr/local/bundle/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \\
     BASH_ENV=/etc/profile.d/00-mimo-toolchains.sh
 COPY mimo_setup.sh /tmp/mimo_setup.sh
-RUN sh /tmp/mimo_setup.sh {cwd} && rm -f /tmp/mimo_setup.sh
+RUN sh /tmp/mimo_setup.sh {cwd} {keep_build_env} && rm -f /tmp/mimo_setup.sh
 WORKDIR {cwd}
 """
 
 SETUP_SH = r"""#!/bin/sh
-# Make a MiMo image usable outside Xiaomi's cluster. $1 = repository dir.
+# Make a MiMo image usable outside Xiaomi's cluster, then strip answer leaks.
+# $1 = repository dir; $2 = 1 if the verifier reads the image's own .build_env (keep it whole).
 set -e
 CWD="$1"
+KEEP_BUILD_ENV="${2:-0}"
 
 # 1. apt points at Xiaomi's internal mirror (apt.sys.srv): use the public archives instead.
 rm -f /etc/apt/sources.list.d/xiaomi.sources /etc/apt/sources.list.d/xiaomi.list
@@ -142,6 +148,116 @@ if ! git -C "$CWD" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 git -C "$CWD" rev-parse HEAD > /etc/mimo_base_ref
 chmod 600 /etc/mimo_base_ref
+BASE=$(cat /etc/mimo_base_ref)
+cd "$CWD"
+
+# 4. Anti-hack cleanup, ported from MiMo-Agent (anti_hack_cleanup: true in verl config/agent/code/mini-*.yaml):
+#    environments/datasets/base.py _purge_build_residue + _purge_build_artifacts + _purge_global_caches.
+#    Best-effort, like MiMo. This dataset rows carry no "language", so MiMo uses _CLEAN_KEEP_UNKNOWN and
+#    skips the rust/swift/python-specific steps; same here.
+# 4a. _purge_build_residue (_RESIDUE_SCRUB_GLOBAL + repo node_modules caches)
+rm -rf "$CWD/node_modules/.cache" "$CWD/node_modules/.vitest" 2>/dev/null || true
+rm -f /tmp/fail.log /tmp/pass.log /tmp/patch.diff /tmp/test_patch.diff /tmp/*.log 2>/dev/null || true
+rm -rf /tmp/claude-0 /tmp/claude-* /tmp/testem-* /tmp/puppeteer_dev_chrome_profile-* 2>/dev/null || true
+rm -f /tmp/test_files.json 2>/dev/null || true
+rm -rf /tmp/jest_* /tmp/jest-* /tmp/build /tmp/build_env 2>/dev/null || true
+rm -rf /tmp/pytest-of-root /tmp/pytest-* /tmp/.pytest_cache /tmp/__pycache__ 2>/dev/null || true
+rm -rf /tmp/go-build* /tmp/standards /tmp/wordpress /tmp/zig-* /tmp/testbase /tmp/testbed 2>/dev/null || true
+rm -f /tmp/tmp*.tmp /tmp/*.bak /tmp/expect* /tmp/butwas* 2>/dev/null || true
+rm -rf /root/.cache/go-build 2>/dev/null || true
+rm -rf /tests /logs 2>/dev/null || true
+find /var/log -type f -delete 2>/dev/null || true
+rm -rf /var/lib/postgresql/*/*/log /var/lib/postgresql/*/*/pg_log 2>/dev/null || true
+find /var/lib/mysql /var/lib/mongodb -type f -name '*.log' -delete 2>/dev/null || true
+rm -rf /root/.npm/_logs /root/.babel.json /root/.pytest_cache 2>/dev/null || true
+find / -maxdepth 4 -xdev -name task_description.md -path '*/.build_env/*' -delete 2>/dev/null || true
+# 4b. _purge_build_artifacts: git clean -fdx keeping dependency dirs (_CLEAN_KEEP_COMMON + _CLEAN_KEEP_UNKNOWN).
+#     Deviation: .build_env is also excluded here and handled below. MiMo keeps .build_env/test_command.sh
+#     by design; 50 tasks' verifiers read the image's own .build_env (venvs, site-packages) without
+#     shipping it in test.patch, so for those (KEEP_BUILD_ENV=1) it is kept whole.
+git clean -fdxq -e node_modules -e bower_components -e .husky -e vendor -e third_party -e _deps \
+  -e vcpkg_installed -e .venv -e venv -e .gradle -e target -e .build -e lib -e .bundle -e Manifest.toml \
+  -e _build -e .stack-work -e dist-newstyle -e .build_env 2>/dev/null || true
+if [ -d .build_env ] && [ "$KEEP_BUILD_ENV" != 1 ] && ! git ls-files --error-unmatch .build_env >/dev/null 2>&1; then
+  find .build_env -mindepth 1 -maxdepth 1 ! -name test_command.sh -exec rm -rf {} + 2>/dev/null || true
+fi
+# 4c. _purge_global_caches (_GLOBAL_CACHE_SCRUB)
+find /root/.m2 -type f \( -name '*-SNAPSHOT.jar' -o -name '*-SNAPSHOT-sources.jar' \
+  -o -name '*-SNAPSHOT-tests.jar' -o -name '*-SNAPSHOT-test-sources.jar' \) -delete 2>/dev/null || true
+rm -rf /root/.julia/compiled 2>/dev/null || true
+rm -rf /root/.gradle/caches/build-cache-* /root/.gradle/daemon 2>/dev/null || true
+rm -rf /root/.gradle/caches/*/scripts /root/.gradle/caches/jars-* 2>/dev/null || true
+rm -rf /root/.cache/bazel 2>/dev/null || true
+
+# 5. Strip git history that is not in BASE's ancestry, then assert nothing newer than BASE survives.
+#    (MiMo: base.py _strip_future_commits + opensource_code.py _assert_history_truncated; this also
+#    removes dangling objects, which MiMo's rev-list assertion does not see.) HEAD stays at BASE and the
+#    working tree is untouched.
+strip_git() {  # $1 = repo dir, $2 = base commit
+  (
+  cd "$1" || exit 1
+  b="$2"
+  gd=$(git rev-parse --absolute-git-dir) || exit 1
+  git worktree prune 2>/dev/null || true
+  rm -rf "$gd/worktrees"
+  for r in $(git remote 2>/dev/null); do git remote remove "$r" >/dev/null 2>&1 || true; done
+  git stash clear 2>/dev/null || true
+  # Keep only refs whose commit is an ancestor of base (old branches/tags for `git describe`);
+  # drop everything else, incl. replace/notes/stash/remotes/pull refs and non-commit refs.
+  git for-each-ref --format='%(refname)' | while read -r ref; do
+    case "$ref" in
+      refs/heads/*|refs/tags/*) git merge-base --is-ancestor "$ref" "$b" 2>/dev/null && continue ;;
+    esac
+    git update-ref -d "$ref" 2>/dev/null || git update-ref --no-deref -d "$ref" 2>/dev/null || true
+  done
+  # for-each-ref skips broken refs (e.g. refs/remotes/origin/HEAD -> a deleted branch), and gc then
+  # dies on them: drop remote refs wholesale and any loose ref that no longer resolves.
+  rm -rf "$gd/refs/remotes"
+  find "$gd/refs" -type f 2>/dev/null | while read -r f; do
+    git rev-parse -q --verify "${f#"$gd"/}" >/dev/null 2>&1 || rm -f "$f"
+  done
+  [ -f "$gd/packed-refs" ] && grep -v ' refs/remotes/' "$gd/packed-refs" > "$gd/packed-refs.new" && mv "$gd/packed-refs.new" "$gd/packed-refs"
+  for f in ORIG_HEAD FETCH_HEAD MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD AUTO_MERGE BISECT_LOG BISECT_START \
+           BISECT_EXPECTED_REV BISECT_ANCESTORS_OK BISECT_NAMES BISECT_TERMS rebase-merge rebase-apply \
+           sequencer refs/original logs; do
+    rm -rf "${gd:?}/$f"
+  done
+  git reflog expire --expire=now --expire-unreachable=now --all 2>/dev/null || true
+  # Objects borrowed from an alternate store can't be pruned here: copy what we need, drop the link.
+  if [ -s "$gd/objects/info/alternates" ]; then git repack -a -d -q && rm -f "$gd/objects/info/alternates"; fi
+  rm -f "$gd"/objects/pack/*.keep "$gd"/objects/pack/*.mtimes
+  git -c gc.pruneExpire=now -c gc.cruftPacks=false -c gc.reflogExpire=now -c gc.reflogExpireUnreachable=now \
+    gc -q --prune=now || exit 1
+  git prune --expire=now 2>/dev/null || true
+  )
+}
+assert_git_clean() {  # $1 = repo dir, $2 = base commit; prints the reason and returns 1 on a leak
+  (
+  cd "$1" || exit 1
+  b="$2"
+  [ "$(git rev-parse HEAD)" = "$b" ] || { echo "HEAD moved off base"; exit 1; }
+  n=$(git rev-list --all --not "$b" | wc -l)
+  [ "$n" -eq 0 ] || { echo "$n commits outside base ancestry reachable"; exit 1; }
+  bt=$(git log -1 --format=%ct "$b")
+  newer=0
+  for c in $(git fsck --connectivity-only --unreachable --no-reflogs --no-progress 2>/dev/null | awk '$2 == "commit" {print $3}'); do
+    ct=$(git log -1 --format=%ct "$c" 2>/dev/null || echo 0)
+    [ "$ct" -gt "$bt" ] && newer=$((newer + 1))
+  done
+  [ "$newer" -eq 0 ] || { echo "$newer unreachable commits newer than base"; exit 1; }
+  )
+}
+strip_git "$CWD" "$BASE"
+if ! why=$(assert_git_clean "$CWD" "$BASE"); then
+  echo "mimo_setup: FATAL git history leak in $CWD: $why"; exit 1
+fi
+# Submodules: same strip at each submodule's checked-out commit (warn only).
+git submodule foreach --recursive --quiet 'pwd' 2>/dev/null | while read -r sm; do
+  sb=$(git -C "$sm" rev-parse HEAD 2>/dev/null) || continue
+  strip_git "$sm" "$sb" >/dev/null 2>&1 || true
+  w=$(assert_git_clean "$sm" "$sb") || echo "mimo_setup: WARN submodule $sm: $w"
+done
+echo "mimo_setup: done (base $BASE, $(git rev-list --count HEAD) commits in history)"
 """
 
 TEST_SH = """#!/bin/bash
@@ -177,6 +293,7 @@ fi
 {{ {test_command}; }} </dev/null
 rc=$?
 echo "verifier_returncode=$rc"
+echo "mimo_mem_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null) mimo_disk=$(df -k / | awk 'NR==2{{print $3"/"$2}}')"
 [ $rc -eq 0 ] && echo 1 > /logs/verifier/reward.txt
 exit 0
 """
@@ -193,6 +310,36 @@ def touched_files(patch: str) -> list[str]:
     return files
 
 
+def uses_image_build_env(patch: str) -> bool:
+    """The verifier reads the image's own .build_env (it doesn't ship one as mimo_build_env.tar.gz.b64)."""
+    return ".build_env" in patch and "mimo_build_env.tar.gz.b64" not in patch
+
+
+HEAVY_RE = re.compile(r"\b(node|npx|npm|pnpm|yarn|jest|vitest|mocha|mvn|mvnw|gradle|gradlew|java|sbt)\b")
+
+
+def verifier_text(r: dict) -> str:
+    """test_command + test patch, with any base64 build-env tarball unpacked (it holds the test scripts)."""
+    import base64, io, tarfile
+    text = r["test_command"] + "\n" + r["test_patch"]
+    m = re.search(r"mimo_build_env\.tar\.gz\.b64\n.*?@@[^\n]*\n((?:\+[^\n]*\n)+)", r["test_patch"], re.S)
+    if m:
+        try:
+            raw = base64.b64decode("".join(l[1:] for l in m.group(1).splitlines()))
+            with tarfile.open(fileobj=io.BytesIO(raw)) as tf:
+                for mem in tf.getmembers():
+                    if mem.isfile() and mem.size < 2_000_000:
+                        text += "\n" + tf.extractfile(mem).read().decode(errors="ignore")
+        except Exception:
+            pass
+    return text
+
+
+def memory_for(r: dict, default_mb: int, heavy_mb: int) -> int:
+    """JS/JVM test stacks get more memory: a 4 GB sandbox OOM-killed a jest verifier in the prototype."""
+    return heavy_mb if HEAVY_RE.search(verifier_text(r)) else default_mb
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("parquet")
@@ -201,7 +348,10 @@ def main() -> None:
     ap.add_argument("--ids", default=None, help="comma-separated instance_ids")
     ap.add_argument("--agent-timeout", type=float, default=3600.0)
     ap.add_argument("--cpus", type=int, default=4)
-    ap.add_argument("--memory-mb", type=int, default=8192)  # MiMo k8s sandbox limit: 4 CPU / 8Gi
+    ap.add_argument("--memory-mb", type=int, default=6144)
+    # MiMo k8s sandbox limit is 4 CPU / 8Gi; Daytona reserves the full request against a shared 500 GiB
+    # org quota, so only JS/JVM verifiers get the full 8 GB.
+    ap.add_argument("--heavy-memory-mb", type=int, default=8192)
     ap.add_argument("--storage-mb", type=int, default=10240)
     args = ap.parse_args()
 
@@ -228,12 +378,12 @@ def main() -> None:
                 verifier_timeout=float(r["verifier_timeout_sec"]),
                 agent_timeout=args.agent_timeout,
                 cpus=args.cpus,
-                memory_mb=args.memory_mb,
+                memory_mb=memory_for(r, args.memory_mb, args.heavy_memory_mb),
                 storage_mb=args.storage_mb,
             )
         )
         (d / "instruction.md").write_text(r["problem_statement"].strip() + f"\n\nThe repository is at `{cwd}`.\n")
-        (d / "environment" / "Dockerfile").write_text(DOCKERFILE.format(image=image, cwd=cwd))
+        (d / "environment" / "Dockerfile").write_text(DOCKERFILE.format(image=image, cwd=cwd, keep_build_env=int(uses_image_build_env(r["test_patch"]))))
         (d / "environment" / "mimo_setup.sh").write_text(SETUP_SH)
         (d / "tests" / "test.patch").write_text(r["test_patch"])
         test_sh = d / "tests" / "test.sh"

@@ -1,5 +1,8 @@
 #!/bin/bash
 # Image forensics (run with the nop agent, so this is the untouched image state). Prints FORENSIC key=value lines.
+# /logs leftovers from the image (before this script writes reward.txt)
+echo "FORENSIC logs_leftovers=$(find /logs -mindepth 1 ! -path '/logs/verifier' ! -path '/logs/verifier/test-stdout.txt' ! -path '/logs/agent' ! -path '/logs/agent/*' 2>/dev/null | wc -l)"
+find /logs -mindepth 1 ! -path '/logs/verifier' ! -path '/logs/verifier/test-stdout.txt' ! -path '/logs/agent' ! -path '/logs/agent/*' 2>/dev/null | head -5 | sed 's/^/FORENSIC logs_file /'
 mkdir -p /logs/verifier; echo 0 > /logs/verifier/reward.txt
 CWD="__CWD__"
 cd "$CWD" || { echo "FORENSIC cwd_missing=1"; exit 0; }
@@ -32,5 +35,6 @@ if git apply --check --reverse /tests/test.patch >/dev/null 2>&1; then echo "FOR
 pre=0; for f in $(grep -A1 '^new file mode' /tests/test.patch -B2 | grep -oE '^diff --git a/\S+' | sed 's#diff --git a/##'); do [ -e "$f" ] && { pre=$((pre+1)); echo "FORENSIC new_file_exists $f"; }; done
 echo "FORENSIC patch_new_files_present=$pre"
 echo "FORENSIC build_env_present=$([ -e .build_env ] && echo 1 || echo 0) mimo_files=$(ls -a | grep -c '^mimo_')"
+[ -d .build_env ] && find .build_env -maxdepth 1 -mindepth 1 | head -10 | sed "s/^/FORENSIC build_env_entry /"
 ls -a | grep -E '^(\.build_env|mimo_|test_commands\.json|usercase-test-coderl)' | sed 's/^/FORENSIC leftover /'
 exit 0
