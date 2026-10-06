@@ -98,3 +98,10 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - Build-nonce fix confirmed: 000574 / 000902 (previously 6/6 "context canceled") now complete.
 - Transient: 001235 agent install (uv installer) could not reach github.com from Daytona twice (curl connect
   timeout, install phase = public network). Infra, re-queued.
+- **001235 excluded (persistent infra)**: 7/7 attempts fail in Harbor's agent install (uv installer: `curl: (28) Failed
+  to connect to github.com port 443` after ~135 s), install phase on public network. Probes of the same image (nop
+  agent, verifier phase, plain + login shell) reach github.com fine (no proxy, normal DNS/hosts). Only task with this
+  pattern; left excluded (excluded_infra.txt), revisit if it spreads.
+- Throughput 08:20 UTC: ~13 trials/min with 68 sandboxes; ~20 of them building at any time, ~13 model requests in flight
+  -> image builds/agent install, not the model, are the limiter. Org memory reserved 448/500 GiB (ours 364, user's
+  Anyscale job 84) -> TARGET raised 68 -> 74.
