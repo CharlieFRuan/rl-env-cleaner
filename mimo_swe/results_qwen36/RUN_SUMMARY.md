@@ -152,7 +152,7 @@ Full evidence for each item is in `FINDINGS.md`.
 | `nop_check.sh` | Null-agent rerun of every solved task; writes `broken_nop.txt`. |
 | `supersede_mem4.py` | Moves 4 GB attempts of tasks promoted to 8 GB out of the scored set. |
 | `cleanup_failed_builds.py`, `sandbox_janitor.py`, `maintenance.sh` | Sandbox hygiene (our labels only, every deletion logged). |
-| `make_report.py` | Computes pass@k with bootstrap CIs, exclusions, failure classes and leak flags; writes `summary.json`, `attempts.jsonl` and a short `report.md` (whose contents are folded into this file). |
+| `make_report.py` | Regenerates `summary.json`, `attempts.jsonl` and a short `report.md` (its contents are folded into this file) (pass@k with bootstrap CIs, exclusions, failure classes, leak flags). |
 | `audit.py`, `scan_traces.py` | Verifier-outcome audit and trajectory leak / env-error scan. |
 | `FINDINGS.md` | Full log of issues: symptom, evidence path, fix, rerun result. |
 | `results_qwen36/` | This summary, `summary.json`, `attempts.jsonl`, `report_config.json`, `heavy_ids.txt`, `build_nonce.txt`, exclusion lists, seeded task order. |
