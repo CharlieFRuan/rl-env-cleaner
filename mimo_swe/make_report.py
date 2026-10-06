@@ -27,6 +27,9 @@ UPSTREAM_RX = re.compile(
     re.I,
 )
 NET_OK_RX = re.compile(r"HTTP/\S+ 200|Cloning into|Receiving objects|Saved to|Successfully downloaded|\bdiff --git\b", re.I)
+# "Cloning into ..." is printed before git fails; only count a fetch as OK when no failure marker follows.
+NET_FAIL_RX = re.compile(r"Could not resolve|unable to access|Failed to connect|NewConnectionError|Connection refused|"
+                         r"Network is unreachable|timed out|Temporary failure in name resolution|did not run successfully", re.I)
 GIT_ARCH_RX = re.compile(r"\bgit\s+(show|log|reflog|checkout|cat-file|rev-list|fsck|stash\s+show|branch\s+-a|tag)\b")
 
 
@@ -59,7 +62,7 @@ def auto_leak_flags(traj: dict) -> list[str]:
     flags = set()
     for cmd, out in commands(traj):
         if UPSTREAM_RX.search(cmd):
-            flags.add("upstream-fetch-ok" if NET_OK_RX.search(out) else "upstream-fetch-attempt")
+            flags.add("upstream-fetch-ok" if NET_OK_RX.search(out) and not NET_FAIL_RX.search(out) else "upstream-fetch-attempt")
         if GIT_ARCH_RX.search(cmd) and re.search(r"\b[0-9a-f]{7,40}\b", cmd):
             flags.add("git-archaeology")
     return sorted(flags)
