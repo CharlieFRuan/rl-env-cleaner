@@ -84,3 +84,17 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - **First scored waves (07:05-07:25)**: leak scan of 274 trials: 1 real upstream fetch attempt (`pip download`), blocked
   by the allowlist (connection errors). Null-agent: 19 solved tasks rerun with nop, all reward 0. Agent `command not
   found` hits are missing convenience tools (hexdump/xxd), not verifier toolchains.
+- **Wave-boundary stragglers -> continuous scheduler** (07:45): `harbor run -n N` is continuous *within* a wave, but a
+  wave's free slots idle until its slowest trial ends (agent timeout 3600 s). Replaced wave_loop.sh with
+  `continuous_runner.py` (pattern from NovaSky-AI/harbor-private adapters/mercor/run_mercor_eval.py): one Harbor Trial
+  per (task, attempt) in a spawn process pool, global concurrency target + launch rate (live-tunable via
+  continuous.conf), seeded task order with a task's attempts launched back to back (shared build cache), need
+  reconciled from disk every 3 min (resumable; composes with earlier waves; infra outcomes re-queued; >= 6 infra
+  attempts -> excluded_infra.txt), endpoint-down pause, circuit breaker on 20 consecutive infra outcomes.
+  Same TrialConfig as the waves (template = a harbor-run generated config), so settings are unchanged.
+  Launch bugs found on the way, none affecting scored data: Harbor 0.13.1 needs `await Trial.create(cfg)`; the first
+  launch lacked DAYTONA_API_KEY (146 auth-failure trial dirs moved to jobs/broken-launch-noauth-0748, outside the
+  scored glob). `run_continuous.sh` now sets credentials.
+- Build-nonce fix confirmed: 000574 / 000902 (previously 6/6 "context canceled") now complete.
+- Transient: 001235 agent install (uv installer) could not reach github.com from Daytona twice (curl connect
+  timeout, install phase = public network). Infra, re-queued.
