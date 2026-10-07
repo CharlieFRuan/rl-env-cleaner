@@ -62,13 +62,40 @@ Spec: `~/HANDOFF.md`. Code and results: `CharlieFRuan/rl-env-cleaner`, branch **
 - Concurrency was 68–74, using the full org quota after you approved it.
 
 ## Anti-leak measures (HANDOFF §4)
-1. **MiMo `anti_hack_cleanup` ported** into `mimo_setup.sh`, the build step: it purges build residue, build artifacts and global caches.
-2. **Git history stripped at build.** Non-ancestor refs, remotes, stash, notes, reflog and `ORIG_HEAD` are removed, followed by `gc --prune=now`.
-   - **The build fails** if any non-ancestor commit is still reachable, or if a dangling commit newer than the base exists.
-3. **Agent-phase network allowlist.** The Daytona `domain_allow_list` covers only the tunnel host (`labeled_daytona.py`).
-   - Agent install and verifier run with public network; only the agent's run is restricted.
+
+`mimo_setup.sh` is **ours, not MiMo's.** It's the `SETUP_SH` string in `mimo_swe/mimo_to_harbor.py` (from line 71). The converter writes it into every task as `environment/mimo_setup.sh`, and the generated Dockerfile (`DOCKERFILE`, line 62) runs it at image build:
+
+```
+RUN sh /tmp/mimo_setup.sh <cwd> <KEEP_BUILD_ENV>
+```
+
+The prototype wrote steps 1–3 (apt and toolchain fixes, base-commit record). Steps 4–5 below were added in this run. MiMo's own code is Python (`MiMo-Agent/src/mimoagent/environments/datasets/base.py`, `opensource_code.py`); step 4 is a shell port of it.
+
+1. **MiMo `anti_hack_cleanup` port.** `SETUP_SH` step 4 (`mimo_to_harbor.py` lines 182–219):
+   - 4a `_purge_build_residue` (`_RESIDUE_SCRUB_GLOBAL`): `/tmp` logs and patches, `test_files.json`, jest/pytest/go-build caches, `/tests`, `/logs`, `/var/log/*`, and `.build_env/task_description.md`.
+   - 4b `_purge_build_artifacts`: `git clean -fdx` keeping dependency dirs (MiMo's keep lists). `.build_env/` is excluded from the clean; only `test_command.sh` is kept, unless the verifier reads the image's own `.build_env`, in which case `KEEP_BUILD_ENV=1` and it's kept whole.
+   - 4c `_purge_global_caches` (`_GLOBAL_CACHE_SCRUB`): Maven SNAPSHOT jars and Julia, Gradle and Bazel caches.
+   - The source references (`base.py:607`, `:630`, `:709`, `:826`) are in comments at the top of step 4.
+2. **Git history strip and assert.** `SETUP_SH` step 5 (lines 220–289):
+   - `strip_git()` (line 224) removes non-ancestor refs, remotes (including broken symrefs), stash, notes, replace refs, worktrees, reflog, `ORIG_HEAD`/`FETCH_HEAD`, `.keep` files and alternates, then runs `gc --prune=now`.
+   - `assert_git_clean()` (line 262) requires HEAD == base, empty `rev-list --all --not BASE`, and no unreachable commit newer than base.
+   - Called at line 278; **`exit 1` fails the image build** on a leak.
+   - Base commit recorded in step 3 (line 171) to `/etc/mimo_base_ref` (root-only).
+3. **Grader residue.** Build: `rm -rf /logs/verifier /logs/agent` (line 169). Verifier: `TEST_SH` (line 291) deletes any `reward.json` before grading (line 295), so a stale or agent-planted one can't count.
+4. **Agent-phase network allowlist.**
+   - **Task side:** `TASK_TOML` `[agent] network_mode = "allowlist"` (line 45).
+   - **Run side:** `--allow-agent-host <tunnel host>` (`run_harbor.sh`), and `agent.extra_allowed_hosts` in the continuous runner's `trial_config()`.
+   - **Enforcement:** `labeled_daytona.py` `LabeledDaytonaEnv`.
+     - `capabilities` (line 41) turns on `network_allowlist` / `dynamic_network_policy`.
+     - `_apply_network_policy` (line 56) calls `sandbox.update_network_settings(domain_allow_list=...)` for the agent phase, and clears it for public.
+   - Agent install and verifier run with public network; only `agent.run()` is restricted.
    - Verified end to end before the run: github, pypi, npm, golang, crates, maven, direct-IP, plain HTTP and DNS all fail; only the tunnel works.
-4. **Outcome:** 141 upstream-fetch attempts in the trajectories, and **0 succeeded**. I read every trajectory the scans flagged as a possible success. The null-agent check covered **all 1,710 solved tasks**.
+5. **Grading isolation.** `TEST_SH` resets every patch-touched file to the base commit before applying the hidden tests (lines 301–313). It then applies the patch (line 315) and runs the test command with no stdin (line 321), as MiMo's `OpenSourceCodeEnvironment` does.
+6. **Checks during the run:**
+   - `nop_check.sh`: null-agent rerun of every solved task, writing `broken_nop.txt`.
+   - `scan_traces.py`: trajectory leak and environment-error scan.
+   - `make_report.py`: leak flags in `attempts.jsonl`.
+7. **Outcome:** 141 upstream-fetch attempts in the trajectories, and **0 succeeded**. I read every trajectory the scans flagged as a possible success. The null-agent check covered **all 1,710 solved tasks**.
 
 ## Timeline (UTC)
 - **06:15–06:45:** started the Ray cluster, installed vLLM, downloaded the model. Two forks ported the anti-leak cleanup and built the Daytona allowlist env.
@@ -86,20 +113,22 @@ Spec: `~/HANDOFF.md`. Code and results: `CharlieFRuan/rl-env-cleaner`, branch **
 
 ## Issues found and fixed
 
-Full evidence for each item is in `FINDINGS.md`.
+Full evidence for each item is in `FINDINGS.md`. Line numbers refer to `mimo_swe/` on branch `qwen36-b200-run`.
 
-| Problem | Fix |
-|---|---|
-| Dangling `refs/remotes/origin/HEAD` after the strip made `git gc` fail | Drop `refs/remotes` and unresolvable refs |
-| Daytona cached a *cancelled* build ("context canceled" on every create) after killing harbor mid-build | `build_nonce.txt` gives those tasks a fresh Dockerfile hash |
-| deb822 `.sources` stanza left without `URIs` by our Xiaomi-mirror rewrite | Drop whole stanzas |
-| Image saved mid-dpkg | `dpkg --configure -a` at build |
-| Half-configured package whose postinst calls systemctl (typesense) | Disable that postinst and configure |
-| Image with unmet dependencies | `apt-get -f install` when `apt-get check` fails |
-| Harbor's default retry set would retry agent outcomes and bias results | Retry infra exception types only; endpoint errors re-queued by the scheduler |
-| `harbor run` wave-boundary stragglers | `continuous_runner.py` |
-| Harbor leaves BUILD_FAILED and ERROR sandboxes behind | Cleaned every 10 min (ours only, logged) |
-| OOM at 4 GB, including OOMs that kill the whole sandbox and leave no verdict | Tier promotion via `heavy_ids.txt` and `supersede_mem4.py` |
+| Problem | Fix | Where in the code |
+|---|---|---|
+| Dangling `refs/remotes/origin/HEAD` after the strip made `git gc` fail | Drop `refs/remotes`, unresolvable loose refs and remote packed-refs | `mimo_to_harbor.py` `SETUP_SH` `strip_git()`, lines 241–247 |
+| Daytona cached a *cancelled* build ("context canceled" on every create) after harbor was killed mid-build | Nonce comment, so those tasks get a fresh Dockerfile hash | Data file `build_nonce.txt` (`results_qwen36/`), read via `--nonce-file` (`mimo_to_harbor.py` line 388; Dockerfile append line 434) |
+| deb822 `.sources` stanza left without `URIs` by our Xiaomi-mirror rewrite | Drop whole stanzas pointing at the mirror; drop stanzas with empty `URIs` | `SETUP_SH` step 1, lines 80–84 and 114–118 |
+| Image saved mid-dpkg | `dpkg --configure -a` at build | `SETUP_SH` step 1, lines 103–104 |
+| Half-configured package whose postinst calls systemctl (typesense) | Rename its postinst to `*.mimo-disabled`, then configure | `SETUP_SH` step 1, lines 105–112 |
+| Image with unmet dependencies | `apt-get -f install` when `apt-get check` fails | `SETUP_SH` step 1, lines 126–132 |
+| Harbor's default retry set would retry agent outcomes and bias results | Retry infra exception types only; endpoint errors re-queued by the scheduler | Waves: `wave_loop.sh` lines 35–36 (`--retry-include`). Continuous run: no Harbor retries; `trial_status.py` `classify()` (line 50, endpoint regex line 22) + `continuous_runner.py` `reconcile()` (line 143) |
+| `harbor run` wave-boundary stragglers | One trial per (task, attempt) with continuous refill | `continuous_runner.py` (whole file; circuit breaker around line 219), launched by `run_continuous.sh` |
+| Harbor leaves BUILD_FAILED and ERROR sandboxes behind | Delete ours (labels checked) every 10 min, each logged | `cleanup_failed_builds.py` line 19, run by `maintenance.sh` |
+| OOM at 4 GB, including OOMs that kill the whole sandbox and leave no verdict | Promote the task to 8 GB; supersede its 4 GB attempts | Default tiers: `HEAVY_RE` / `memory_for()` (`mimo_to_harbor.py` 348–370). Promotions: `heavy_ids.txt` via `--heavy-ids-file` (390, 408–427). Supersede: `supersede_mem4.py` |
+| Host-side API key check in Harbor | Export the key on the host as well as `--ae` | `run_harbor.sh` (`export MSWEA_API_KEY OPENAI_API_KEY`), `continuous_runner.py` `worker_run_trial()` |
+| Resource sizing had no data | Log memory/disk and CPU stats at verify time | `TEST_SH` lines 324–326 (`mimo_mem_peak_bytes`, `mimo_cpu_stat`) |
 
 ## Open items for you
 - **Forensics outputs unreviewed.** I didn't read `jobs/gate-forensics-r2/*/verifier/test-stdout.txt`, because Claude Code auto mode blocked it. The build-time git assert enforces the main property those outputs measure.
