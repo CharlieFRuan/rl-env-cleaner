@@ -75,7 +75,7 @@ The prototype wrote steps 1–3 (apt and toolchain fixes, base-commit record). S
    - 4a `_purge_build_residue` (`_RESIDUE_SCRUB_GLOBAL`): `/tmp` logs and patches, `test_files.json`, jest/pytest/go-build caches, `/tests`, `/logs`, `/var/log/*`, and `.build_env/task_description.md`.
    - 4b `_purge_build_artifacts`: `git clean -fdx` keeping dependency dirs (MiMo's keep lists). `.build_env/` is excluded from the clean; only `test_command.sh` is kept, unless the verifier reads the image's own `.build_env`, in which case `KEEP_BUILD_ENV=1` and it's kept whole.
    - 4c `_purge_global_caches` (`_GLOBAL_CACHE_SCRUB`): Maven SNAPSHOT jars and Julia, Gradle and Bazel caches.
-   - The source references (`base.py:607`, `:630`, `:709`, `:826`) are in comments at the top of step 4.
+   - The comments at the top of steps 4 and 5 name the MiMo functions each block ports. In MiMo-Agent `base.py` they're at about `_RESIDUE_SCRUB_GLOBAL` :607, `_purge_build_residue` :630, `_purge_build_artifacts` :709 and `_strip_future_commits` :826, with `_assert_history_truncated` in `opensource_code.py` :156.
 2. **Git history strip and assert.** `SETUP_SH` step 5 (lines 220–289):
    - `strip_git()` (line 224) removes non-ancestor refs, remotes (including broken symrefs), stash, notes, replace refs, worktrees, reflog, `ORIG_HEAD`/`FETCH_HEAD`, `.keep` files and alternates, then runs `gc --prune=now`.
    - `assert_git_clean()` (line 262) requires HEAD == base, empty `rev-list --all --not BASE`, and no unreachable commit newer than base.
