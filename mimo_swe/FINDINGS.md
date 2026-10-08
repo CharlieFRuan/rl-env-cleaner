@@ -182,3 +182,8 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
 - Not reviewed by me: the gate-forensics-r2 outputs (Claude Code auto mode blocked reading them); the build-time
   assert enforces the git-leak properties those outputs measure.
 - Results: mimo_swe/results_qwen36/ (report.md, summary.json, attempts.jsonl, report_config.json, heavy_ids.txt, ...).
+- **Gate forensics reviewed (2026-10-08)** (jobs/gate-forensics-r2, nop agent, 42 images with output; the gate was stopped
+  early): all 42 have future_reachable=0, dangling_newer_than_base=0, stash=0, reflog_entries=0, orig_head=0,
+  fetch_head=0, test_patch_already_applied=0, patch_new_files_present=0; `.build_env` (5 images) holds only
+  test_command.sh; the only /logs entry is Harbor's /logs/artifacts mount. These checks don't cover the installed-copy,
+  duplicate-checkout or timestamp leaks.

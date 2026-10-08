@@ -131,7 +131,7 @@ Full evidence for each item is in `FINDINGS.md`. Line numbers refer to `mimo_swe
 | Resource sizing had no data | Log memory/disk and CPU stats at verify time | `TEST_SH` lines 324–326 (`mimo_mem_peak_bytes`, `mimo_cpu_stat`) |
 
 ## Open items for you
-- **Forensics outputs unreviewed.** I didn't read `jobs/gate-forensics-r2/*/verifier/test-stdout.txt`, because Claude Code auto mode blocked it. The build-time git assert enforces the main property those outputs measure.
+- **Forensics outputs: reviewed 2026-10-08.** 42 images produced output (the gate was stopped early to start the scored run). All 42 show `future_reachable=0`, `dangling_newer_than_base=0`, `stash=0`, `reflog_entries=0`, no `ORIG_HEAD`/`FETCH_HEAD`, `test_patch_already_applied=0` and `patch_new_files_present=0`. The 5 images with a `.build_env` hold only `test_command.sh`, as designed. The only `/logs` entry is Harbor's own `/logs/artifacts` mount. These checks don't cover the installed-copy, duplicate-checkout or timestamp leaks found later by the trajectory audit.
 - **Still running on nodes 4–7:** the 32 vLLM replicas, the router and the tunnel. A `STOP` file in `~/mimo` has halted the helper loops.
 - **vCPU sizing for the next run.** CPU logging from the last ~1,600 attempts is in the verifier output (`mimo_cpu_stat`).
   - Average use is about 0.9 cores, but about half the sandboxes hit the 4-core cap during bursts.
