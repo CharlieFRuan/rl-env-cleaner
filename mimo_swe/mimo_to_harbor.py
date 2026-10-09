@@ -288,6 +288,70 @@ done
 echo "mimo_setup: done (base $BASE, $(git rev-list --count HEAD) commits in history)"
 """
 
+# Task-specific residue cleanup, appended to SETUP_SH for tasks listed in --residue-fixes-file (found by the image residue
+# audit: residue_probe.sh / residue_audit.py; see RESIDUE_AUDIT.md). Each action neutralizes a copy of post-BASE code:
+#   sync <dir> <base_prefix>  rewrite every file of an installed copy of the project that BASE also has (at <base_prefix><rel>)
+#                             to BASE's content, delete its source files BASE lacks, drop its bytecode. The install stays
+#                             usable (compiled parts, metadata kept) but holds base code only.
+#   syncfile <file> <base_path>  same for a single-module install (site-packages/<mod>.py)
+#   rm <path>                 delete a build output, cache or second checkout
+#   pycache                   delete untracked bytecode in the repo (stale .pyc compiled from other source versions,
+#                             compiled hidden tests); MiMo's git clean keeps it under lib/, vendor/, .build_env/, ...
+RESIDUE_FIX_HEAD = r"""
+# 6. Task-specific residue cleanup (residue_fixes.tsv).
+residue_sync() {  # $1 = installed copy dir, $2 = path prefix of the same files in BASE
+  [ -d "$1" ] || { echo "mimo_setup: residue sync: $1 missing"; return 0; }
+  (cd "$1" && find . -type f ! -path '*/__pycache__/*' | sed 's#^\./##') > /tmp/.residue_files
+  : > /tmp/.residue_extra
+  ns=0; nd=0
+  while IFS= read -r f; do
+    if git -C "$CWD" cat-file -e "$BASE:$2$f" 2>/dev/null; then
+      git -C "$CWD" show "$BASE:$2$f" > "$1/$f.residue_tmp" && cat "$1/$f.residue_tmp" > "$1/$f" && rm -f "$1/$f.residue_tmp"
+      ns=$((ns + 1))
+    else
+      echo "$f" >> /tmp/.residue_extra
+    fi
+  done < /tmp/.residue_files
+  # Source files BASE lacks are removed only when the copy clearly maps onto BASE's layout (>= half its files),
+  # so a wrong prefix can never empty an installed package.
+  if [ -s /tmp/.residue_extra ] && [ $((ns * 2)) -ge "$(wc -l < /tmp/.residue_files)" ]; then
+    while IFS= read -r f; do
+      case "$f" in
+        *_version.py|*/version.py|version.py|*__about__.py) ;;
+        *.py|*.pyi|*.pyx|*.js|*.mjs|*.cjs|*.jsx|*.ts|*.tsx|*.go|*.rs|*.rb|*.php|*.java) rm -f "$1/$f"; nd=$((nd + 1)) ;;
+      esac
+    done < /tmp/.residue_extra
+  fi
+  rm -f /tmp/.residue_files /tmp/.residue_extra
+  find "$1" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+  echo "mimo_setup: residue sync $1: $ns files set to base, $nd post-base source files removed"
+}
+"""
+RESIDUE_PYCACHE = r"""find "$CWD" \( -path '*/site-packages' -o -path '*/dist-packages' -o -path '*/node_modules' -o -path "$CWD/.git" \) -prune \
+  -o -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+find "$CWD" \( -path '*/site-packages' -o -path '*/dist-packages' -o -path '*/node_modules' -o -path "$CWD/.git" \) -prune \
+  -o -type f -name '*.pyc' -exec sh -c 'git -C "$0" ls-files --error-unmatch "$1" >/dev/null 2>&1 || rm -f "$1"' "$CWD" {} \; 2>/dev/null || true
+echo "mimo_setup: residue: repo bytecode removed"
+"""
+
+
+def residue_fix_sh(actions: list[list[str]]) -> str:
+    out = [RESIDUE_FIX_HEAD]
+    for a in actions:
+        if a[0] == "sync":
+            out.append(f"residue_sync {shlex.quote(a[1])} {shlex.quote(a[2] if len(a) > 2 else '')}\n")
+        elif a[0] == "syncfile":  # single-module install (site-packages/<mod>.py)
+            out.append(f"git -C \"$CWD\" show \"$BASE:{a[2]}\" > /tmp/.residue_f && cat /tmp/.residue_f > {shlex.quote(a[1])} "
+                       f"&& rm -f /tmp/.residue_f && echo 'mimo_setup: residue: {a[1]} set to base'\n")
+        elif a[0] == "rm":
+            out.append(f"rm -rf {shlex.quote(a[1])} && echo 'mimo_setup: residue: removed {a[1]}'\n")
+        elif a[0] == "pycache":
+            out.append(RESIDUE_PYCACHE)
+        else:
+            raise ValueError(f"unknown residue action {a}")
+    return "".join(out)
+
+
 TEST_SH = """#!/bin/bash
 # Reward = 1 iff test_command exits 0 after the hidden test patch is applied.
 mkdir -p /logs/verifier
@@ -396,6 +460,8 @@ def main() -> None:
     ap.add_argument("--heavy-ids-file", default=None, help="lines: <instance_id> [# reason]")
     # Measured per-task sizes (sandbox_provision_pass.md); they override --cpus/--memory-mb/--storage-mb and heavy tiers.
     ap.add_argument("--resources-file", default=None, help="task_resources.tsv: <instance_id> <vcpus> <memory_gib> <storage_gib>")
+    # Image residue audit results (RESIDUE_AUDIT.md): lines "<instance_id>\t<action>\t<arg>..." (sync / rm / pycache).
+    ap.add_argument("--residue-fixes-file", default=None, help="residue_fixes.tsv")
     args = ap.parse_args()
 
     df = pd.read_parquet(args.parquet)
@@ -424,6 +490,13 @@ def main() -> None:
                 k, c, m, st = line.split("\t")[:4]
                 sized[k] = (int(c), int(m) * 1024, int(st) * 1024)
 
+    residue_fixes: dict[str, list[list[str]]] = {}
+    if args.residue_fixes_file:
+        for line in Path(args.residue_fixes_file).read_text().splitlines():
+            if line.startswith("format-code-task-"):
+                k, *a = line.split("\t")
+                residue_fixes.setdefault(k, []).append(a)
+
     out = Path(args.out_dir)
     for r in rows:
         iid, cwd = r["instance_id"], r["cwd"]
@@ -449,7 +522,7 @@ def main() -> None:
         if iid in nonces:
             dockerfile += f"# build-nonce: {nonces[iid]}\n"
         (d / "environment" / "Dockerfile").write_text(dockerfile)
-        (d / "environment" / "mimo_setup.sh").write_text(SETUP_SH)
+        (d / "environment" / "mimo_setup.sh").write_text(SETUP_SH + (residue_fix_sh(residue_fixes[iid]) if iid in residue_fixes else ""))
         (d / "tests" / "test.patch").write_text(r["test_patch"])
         test_sh = d / "tests" / "test.sh"
         test_sh.write_text(
