@@ -4,8 +4,15 @@ Goal: per-task Daytona sandbox resources for the 2,698 MiMo-V2.6-RL-oss SWE task
 enough not to change outcomes. This is pure profiling, not an eval; rewards are only a sanity check. It ran 2026-10-08 to 10-09
 with Qwen3.6-35B-A3B + mini-swe-agent, 4 attempts per task.
 
+Where the result lives: **each task's own `task.toml`** (`[environment]` `cpus` / `memory_mb` / `storage_mb`), which is
+what Harbor reads. `harbor_tasks/` is generated and not versioned, so the values are also kept in `task_resources.tsv`,
+which `mimo_to_harbor.py --resources-file task_resources.tsv` writes into each `task.toml` on regeneration. Use it together
+with the usual `--nonce-file build_nonce.txt --heavy-ids-file heavy_ids.txt` so the Dockerfiles, and so the cached images,
+stay the same. Runs must not set `override_cpus` / `override_memory_mb` / `override_storage_mb` in the trial config, or
+they replace the per-task values. The profiling waves used those overrides on purpose.
+
 Outputs (this directory):
-- `task_resources.tsv`: the final spec, `task  vcpus  memory_gib  storage_gib` for 2,659 tasks.
+- `task_resources.tsv`: the versioned copy of the spec, `task  vcpus  memory_gib  storage_gib` for 2,659 tasks.
 - `excluded_tasks.tsv`: the 39 excluded tasks, each with a category and reason.
 - `prof/results/`: per-trial and per-task tables for every wave (`analysis` = wave 1, `analysis_cpu4`, `analysis_mem16`).
 
@@ -53,6 +60,8 @@ Policy for any task set:
      keep their wave-1 measurement.
    - **CPU:** tasks flagged as CPU-starved (rule below) are rerun at **double** the vCPU (4). Tasks that weren't flagged
      stay at the small wave-1 allocation.
+   - **Disk:** a task whose disk use hit the wave-1 limit on any attempt gets **double** the disk (40 GiB). Only 001108
+     hit it; it got the doubled allocation without a rerun.
 3. **Wave 3, optional:** tasks that are flagged for both, at both increases together. We didn't run it: the 24 overlap
    tasks got 4 vCPU from the CPU rerun and memory from the memory rerun.
 4. **Exclude what still fails at the maximum.** A task is excluded if, at the maximum allocation (4 vCPU, or 16 GiB):
@@ -104,7 +113,11 @@ Known limitations:
   numbers come from its other attempts.
 - **The rerun is the real test:** a flag only means "worth trying 4".
 
-**Disk:** 20 GiB for every task. It's rarely an issue (see below), so it isn't sized per task.
+**Disk: `max(10, ceil_gib(disk peak) + 2)`**, where the disk peak is the most written to `/` on any measured attempt
+(wave 1 plus any rerun). Disk quota is a real constraint, so it's sized per task like memory. The 10 GiB floor covers almost
+every task (p99 use is 4.9 GiB), and +2 GiB is margin. A task that hit the wave-1 limit (20 GiB) has an unknown real peak, so
+it gets double the limit (40 GiB) instead. The 4 attempts that measured the host filesystem (~540 GB) are ignored; those
+tasks are sized from their other attempts.
 
 ## Wave 1 results (2 vCPU / 8 GiB / 20 GiB, 4 attempts, all 2,698 tasks)
 
@@ -172,7 +185,7 @@ for all of it costs about +4% vCPU in total.
 |---|---|---|
 | vCPU | 4 if CPU-flagged in wave 1, else 2 | 2,562 tasks at 2, **97 at 4** (5,512 vCPU vs 5,318 at a flat 2) |
 | Memory | `ceil_gib(memory.peak) + 1` | 297 tasks at 2 GiB, 1,847 at 3–4, 360 at 5–8, 119 at 9–12, 36 at 13–17. Mean **3.9 GiB**: 10,277 GiB vs 21,272 at a flat 8 (−52%) |
-| Disk | 20 GiB for all | |
+| Disk | `max(10, ceil_gib(disk peak) + 2)`; 40 if an attempt hit the 20 GiB limit | 2,650 tasks at 10 GiB, 3 at 11, 2 at 13, 1 at 14, 1 at 20, 1 at 22, 1 at 40 (001108). 26,637 GiB vs 53,180 at a flat 20 (−50%) |
 | Excluded | 39 tasks (`excluded_tasks.tsv`) | 29 `oom-16g`; `ungradable` 001226 (verifier too slow even at 4 vCPU) and 000315 (verifier times out at 2 and 4 vCPU while using ~0.07 cores, i.e. it hangs); plus 2 `broken-nop` and 6 `leak-flagged` carried over from the eval |
 
 Of the 105 CPU-flagged tasks, 8 are now excluded, which leaves the 97.

@@ -202,5 +202,6 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
     limit on non-reclaimable memory. Mean 3.9 GiB (10,277 GiB total vs 21,272 at a flat 8).
   - Excluded: 000315 (verifier hangs, times out at 2 and 4 vCPU at ~0.07 cores); 29 tasks that OOMed at 16 GiB on any
     attempt (category oom-16g in excluded_tasks.tsv).
-  - Disk: 20 GiB for all; 001108 reached 20.0 GiB and 001540 18.4 GiB. 4 trials report ~540 GB because `/` was a
+  - Disk (revised): max(10, ceil(disk peak) + 2) GiB per task; 2,650 of 2,659 at 10 GiB. 001108 hit the 20 GiB limit on
+    2 of 8 attempts, so it gets double (40 GiB). 001540 peaked at 19.5 GiB and gets 22 GiB. 4 trials report ~540 GB because `/` was a
     766 GB host filesystem rather than the quota volume, so their disk number is unmeasured.

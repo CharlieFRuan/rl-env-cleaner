@@ -394,6 +394,8 @@ def main() -> None:
     ap.add_argument("--nonce-file", default=None, help="lines: <instance_id> <nonce>")
     # Tasks observed to OOM the agent at the default memory (their own test suites need more): heavy tier.
     ap.add_argument("--heavy-ids-file", default=None, help="lines: <instance_id> [# reason]")
+    # Measured per-task sizes (sandbox_provision_pass.md); they override --cpus/--memory-mb/--storage-mb and heavy tiers.
+    ap.add_argument("--resources-file", default=None, help="task_resources.tsv: <instance_id> <vcpus> <memory_gib> <storage_gib>")
     args = ap.parse_args()
 
     df = pd.read_parquet(args.parquet)
@@ -415,6 +417,13 @@ def main() -> None:
     if args.heavy_ids_file and Path(args.heavy_ids_file).exists():
         heavy_ids = {l.split()[0] for l in Path(args.heavy_ids_file).read_text().splitlines() if l.strip() and not l.startswith("#")}
 
+    sized = {}
+    if args.resources_file:
+        for line in Path(args.resources_file).read_text().splitlines():
+            if line.startswith("format-code-task-"):
+                k, c, m, st = line.split("\t")[:4]
+                sized[k] = (int(c), int(m) * 1024, int(st) * 1024)
+
     out = Path(args.out_dir)
     for r in rows:
         iid, cwd = r["instance_id"], r["cwd"]
@@ -429,9 +438,10 @@ def main() -> None:
                 image=image,
                 verifier_timeout=float(r["verifier_timeout_sec"]),
                 agent_timeout=args.agent_timeout,
-                cpus=args.cpus,
-                memory_mb=args.heavy_memory_mb if iid in heavy_ids else memory_for(r, args.memory_mb, args.heavy_memory_mb),
-                storage_mb=args.storage_mb,
+                **(dict(zip(("cpus", "memory_mb", "storage_mb"), sized[iid])) if iid in sized else dict(
+                    cpus=args.cpus,
+                    memory_mb=args.heavy_memory_mb if iid in heavy_ids else memory_for(r, args.memory_mb, args.heavy_memory_mb),
+                    storage_mb=args.storage_mb)),
             )
         )
         (d / "instruction.md").write_text(r["problem_statement"].strip() + f"\n\nThe repository is at `{cwd}`.\n")
