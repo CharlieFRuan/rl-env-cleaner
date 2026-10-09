@@ -37,7 +37,8 @@ MANUAL = [
     ("format-code-task-000255", "sync", "/usr/local/lib/python3.12/dist-packages/theano", "theano/"),
 ]
 # name matches that are not the project under test (vendored third-party libs, generic top-level dirs)
-SKIP = re.compile(r"^format-code-task-000437\t|^format-code-task-002142\t.*/(devtools|examples|docs)$")
+# 002607: compiled scipy built from the fixed source; base Python files on that build do not import -> exclude the task.
+SKIP = re.compile(r"^format-code-task-002607\t|^format-code-task-000437\t|^format-code-task-002142\t.*/(devtools|examples|docs)$")
 
 
 def main():

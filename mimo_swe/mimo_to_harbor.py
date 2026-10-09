@@ -291,12 +291,13 @@ echo "mimo_setup: done (base $BASE, $(git rev-list --count HEAD) commits in hist
 # Task-specific residue cleanup, appended to SETUP_SH for tasks listed in --residue-fixes-file (found by the image residue
 # audit: residue_probe.sh / residue_audit.py; see RESIDUE_AUDIT.md). Each action neutralizes a copy of post-BASE code:
 #   sync <dir> <base_prefix>  rewrite every file of an installed copy of the project that BASE also has (at <base_prefix><rel>)
-#                             to BASE's content, delete its source files BASE lacks, drop its bytecode. The install stays
-#                             usable (compiled parts, metadata kept) but holds base code only.
+#                             to BASE's content and drop its bytecode. Files BASE lacks (generated or newer modules) are
+#                             kept, so the install stays importable; its copies of BASE's files hold base code only.
 #   syncfile <file> <base_path>  same for a single-module install (site-packages/<mod>.py)
 #   rm <path>                 delete a build output, cache or second checkout
-#   pycache                   delete untracked bytecode in the repo (stale .pyc compiled from other source versions,
-#                             compiled hidden tests); MiMo's git clean keeps it under lib/, vendor/, .build_env/, ...
+#   pycache                   delete __pycache__ dirs in the repo (stale .pyc compiled from other source versions,
+#                             compiled hidden tests); MiMo's git clean keeps them under lib/, vendor/, .build_env/, ...
+#                             Legacy sourceless .pyc next to the sources are kept: Python imports those as modules.
 RESIDUE_FIX_HEAD = r"""
 # 6. Task-specific residue cleanup (residue_fixes.tsv).
 residue_sync() {  # $1 = installed copy dir, $2 = path prefix of the same files in BASE
@@ -312,25 +313,16 @@ residue_sync() {  # $1 = installed copy dir, $2 = path prefix of the same files 
       echo "$f" >> /tmp/.residue_extra
     fi
   done < /tmp/.residue_files
-  # Source files BASE lacks are removed only when the copy clearly maps onto BASE's layout (>= half its files),
-  # so a wrong prefix can never empty an installed package.
-  if [ -s /tmp/.residue_extra ] && [ $((ns * 2)) -ge "$(wc -l < /tmp/.residue_files)" ]; then
-    while IFS= read -r f; do
-      case "$f" in
-        *_version.py|*/version.py|version.py|*__about__.py) ;;
-        *.py|*.pyi|*.pyx|*.js|*.mjs|*.cjs|*.jsx|*.ts|*.tsx|*.go|*.rs|*.rb|*.php|*.java) rm -f "$1/$f"; nd=$((nd + 1)) ;;
-      esac
-    done < /tmp/.residue_extra
-  fi
+  # Files BASE lacks are kept: removing them broke installs (generated scipy/__config__.py, airflow modules other
+  # installed packages import). Agent rerun 2026-10-09, RESIDUE_AUDIT.md.
+  nd=$(wc -l < /tmp/.residue_extra)
   rm -f /tmp/.residue_files /tmp/.residue_extra
   find "$1" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
-  echo "mimo_setup: residue sync $1: $ns files set to base, $nd post-base source files removed"
+  echo "mimo_setup: residue sync $1: $ns files set to base, $nd files not in base kept"
 }
 """
 RESIDUE_PYCACHE = r"""find "$CWD" \( -path '*/site-packages' -o -path '*/dist-packages' -o -path '*/node_modules' -o -path "$CWD/.git" \) -prune \
   -o -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
-find "$CWD" \( -path '*/site-packages' -o -path '*/dist-packages' -o -path '*/node_modules' -o -path "$CWD/.git" \) -prune \
-  -o -type f -name '*.pyc' -exec sh -c 'git -C "$0" ls-files --error-unmatch "$1" >/dev/null 2>&1 || rm -f "$1"' "$CWD" {} \; 2>/dev/null || true
 echo "mimo_setup: residue: repo bytecode removed"
 """
 

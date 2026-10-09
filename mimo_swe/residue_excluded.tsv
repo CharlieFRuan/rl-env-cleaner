@@ -1,0 +1,2 @@
+format-code-task-002070	residue-unfixable	confirmed leak (transplant) in Node-bundled npm/node_modules/nopt; rewriting it breaks npm
+format-code-task-002607	residue-unfixable	scipy in .venv/.build_env built from the fixed source; base sources on that build don't import

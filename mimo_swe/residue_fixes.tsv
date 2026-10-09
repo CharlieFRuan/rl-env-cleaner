@@ -92,8 +92,6 @@ format-code-task-002487	sync	/root/.pyenv/versions/3.7.17/lib/python3.7/site-pac
 format-code-task-002517	rm	/testbed
 format-code-task-002517	sync	/root/go/pkg/mod/github.com/reugn/go-streams@v0.12.0	
 format-code-task-002537	sync	/opt/rotki-venv/lib/python3.11/site-packages/rotkehlchen	rotkehlchen/
-format-code-task-002607	sync	/testbed/.build_env/.venv/lib/python3.12/site-packages/scipy	scipy/
-format-code-task-002607	sync	/testbed/.venv/lib/python3.12/site-packages/scipy	scipy/
 format-code-task-002659	sync	/testbed/node_modules/execa	
 format-code-task-002668	sync	/usr/local/lib/python3.9/site-packages/sktime	sktime/
 format-code-task-002679	rm	/testbed/lib/futil-js.js
