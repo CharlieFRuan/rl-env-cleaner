@@ -291,6 +291,7 @@ echo "mimo_setup: done (base $BASE, $(git rev-list --count HEAD) commits in hist
 TEST_SH = """#!/bin/bash
 # Reward = 1 iff test_command exits 0 after the hidden test patch is applied.
 mkdir -p /logs/verifier
+echo "mimo_verifier_start=$(date +%s)"
 # Harbor prefers reward.json over reward.txt: drop any stale (image residue) or agent-written one.
 rm -f /logs/verifier/reward.json
 echo 0 > /logs/verifier/reward.txt
@@ -324,6 +325,11 @@ echo "verifier_returncode=$rc"
 echo "mimo_mem_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null) mimo_disk=$(df -k / | awk 'NR==2{{print $3"/"$2}}')"
 # CPU accounting for sizing: cumulative usage + throttling at the cpus limit (cgroup v2), and sandbox uptime
 echo "mimo_cpu_stat=$(tr '\n' ' ' < /sys/fs/cgroup/cpu.stat 2>/dev/null) mimo_cpu_max=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null | tr ' ' '/') mimo_uptime_s=$(cut -d' ' -f1 /proc/uptime) mimo_pid1_start_s=$(awk '{{print $22/100}}' /proc/1/stat 2>/dev/null)"
+# Profiling pass: the background sampler's peaks (if it ran) + lifetime cgroup counters (OOM events, PSI stall totals).
+G=/sys/fs/cgroup
+[ -f /var/lib/.mimo_prof/peaks ] && echo "mimo_prof_peaks $(cat /var/lib/.mimo_prof/peaks)" && cp /var/lib/.mimo_prof/series.csv /logs/verifier/prof_series.csv
+echo "mimo_prof_counters mem_peak=$(cat $G/memory.peak 2>/dev/null) pids_peak=$(cat $G/pids.peak 2>/dev/null) mem_max=$(cat $G/memory.max 2>/dev/null) cpu_max=$(cat $G/cpu.max 2>/dev/null | tr ' ' '/') events=[$(tr '\n' ' ' < $G/memory.events 2>/dev/null)] t_end=$(date +%s)"
+echo "mimo_prof_psi cpu=[$(tr '\n' ' ' < $G/cpu.pressure 2>/dev/null)] memory=[$(tr '\n' ' ' < $G/memory.pressure 2>/dev/null)] io=[$(tr '\n' ' ' < $G/io.pressure 2>/dev/null)]"
 [ $rc -eq 0 ] && echo 1 > /logs/verifier/reward.txt
 exit 0
 """

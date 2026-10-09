@@ -40,11 +40,16 @@ from trial_status import N_ATTEMPTS, classify, task_of  # noqa: E402
 HERE = Path("/home/charlieruan/mimo")
 SRC = Path(__file__).resolve().parent
 TASKS = HERE / "harbor_tasks/mimo-code"
-ORDER = HERE / "task_order_seed20261006.txt"
-JOB = "wave-continuous"
+ORDER = Path(os.environ.get("MIMO_ORDER", HERE / "task_order_seed20261006.txt"))  # task list (subset reruns)
+# Overridable per run (e.g. the profiling pass): job dir name, the glob whose trials count, template, knobs, endpoint.
+JOB = os.environ.get("MIMO_JOB", "wave-continuous")
 TRIALS_DIR = HERE / "jobs" / JOB
-TEMPLATE = HERE / "trial_template.json"  # a TrialConfig written by `harbor run` for a scored trial
-CONF = HERE / "continuous.conf"
+JOBS_GLOB = os.environ.get("MIMO_JOBS_GLOB", "jobs/wave-*")
+TEMPLATE = Path(os.environ.get("MIMO_TEMPLATE", HERE / "trial_template.json"))  # a TrialConfig written by `harbor run`
+CONF = Path(os.environ.get("MIMO_CONF", HERE / "continuous.conf"))
+URL_FILE = Path(os.environ.get("MIMO_URL_FILE", HERE / "tunnel_url"))
+EXCLUDED = Path(os.environ.get("MIMO_EXCLUDED", HERE / "excluded_infra.txt"))
+STOP = Path(os.environ.get("MIMO_STOP", HERE / "STOP"))
 MAX_INFRA = 6
 
 
@@ -65,7 +70,7 @@ def read_conf() -> dict:
 def trial_config(task: str) -> dict:
     """Template TrialConfig, re-pointed at this task and at the current tunnel URL."""
     cfg = json.loads(TEMPLATE.read_text())
-    url = (HERE / "tunnel_url").read_text().strip()
+    url = URL_FILE.read_text().strip()
     host = url.removeprefix("https://")
     key = (HERE / "vllm_api_key").read_text().strip()
     cfg["task"] = {"path": str(TASKS / task), "source": JOB}
@@ -106,8 +111,8 @@ class Scheduler:
         self.queue: list[str] = []  # task ids, one entry per attempt, kept in seeded order
         self.inflight: dict[asyncio.Future, str] = {}
         self.cache: dict[str, str] = {}  # finished trial dir -> validity (immutable once result.json exists)
-        self.excluded = set(l.split()[0] for l in (HERE / "excluded_infra.txt").read_text().splitlines() if l.strip()) \
-            if (HERE / "excluded_infra.txt").exists() else set()
+        self.excluded = set(l.split()[0] for l in EXCLUDED.read_text().splitlines() if l.strip()) \
+            if EXCLUDED.exists() else set()
         self.endpoint_ok = True
         self.last_health = 0.0
         self.launched = 0
@@ -120,7 +125,7 @@ class Scheduler:
         valid, infra, pending = collections.Counter(), collections.Counter(), collections.Counter()
         ours = {os.path.basename(p) for p in self.inflight_dirs()}
         other_running = 0
-        for t in glob.glob(str(HERE / "jobs/wave-*/format-code-task-*__*")):
+        for t in glob.glob(str(HERE / JOBS_GLOB / "format-code-task-*__*")):
             v = self.cache.get(t)
             if v is None:
                 v, _ = classify(t)
@@ -143,14 +148,14 @@ class Scheduler:
     def reconcile(self) -> int:
         # excluded_infra.txt is the source of truth (a fixed task is re-admitted by deleting its line
         # and moving its infra trial dirs out of jobs/wave-*)
-        f = HERE / "excluded_infra.txt"
+        f = EXCLUDED
         self.excluded = {l.split()[0] for l in f.read_text().splitlines() if l.strip()} if f.exists() else set()
         valid, infra, pending, other_running = self.scan()
         inflight = collections.Counter(self.inflight.values())
         new_excl = [t for t in self.order if infra[t] >= MAX_INFRA and valid[t] < N_ATTEMPTS and t not in self.excluded]
         if new_excl:
             self.excluded.update(new_excl)
-            with open(HERE / "excluded_infra.txt", "a") as f:
+            with open(EXCLUDED, "a") as f:
                 for t in new_excl:
                     f.write(f"{t}  # {infra[t]} infra attempts\n")
             log(f"excluded (persistent infra): {new_excl}")
@@ -170,7 +175,9 @@ class Scheduler:
         if time.time() - self.last_health < 120:
             return
         self.last_health = time.time()
-        ok = subprocess.run([str(SRC / "endpoint_health.sh")], capture_output=True).returncode == 0
+        hc = os.environ.get("MIMO_HEALTH_CMD")
+        ok = (subprocess.run(hc, shell=True, capture_output=True).returncode == 0) if hc else \
+            (subprocess.run([str(SRC / "endpoint_health.sh")], capture_output=True).returncode == 0)
         if ok != self.endpoint_ok:
             log(f"endpoint {'UP' if ok else 'DOWN: pausing launches'}")
         self.endpoint_ok = ok
@@ -179,8 +186,9 @@ class Scheduler:
         TRIALS_DIR.mkdir(parents=True, exist_ok=True)
         self.inflight_names: dict[asyncio.Future, str] = {}
         loop = asyncio.get_running_loop()
+        # The pool size caps real concurrency: futures beyond it just queue (TARGET counts them as in flight).
         pool = concurrent.futures.ProcessPoolExecutor(
-            max_workers=160, mp_context=multiprocessing.get_context("spawn"), max_tasks_per_child=1)
+            max_workers=int(os.environ.get("MIMO_POOL_WORKERS", "160")), mp_context=multiprocessing.get_context("spawn"), max_tasks_per_child=1)
         conf, last_conf, last_rec, other_running = read_conf(), 0.0, 0.0, 0
         while True:
             now = time.time()
@@ -189,7 +197,7 @@ class Scheduler:
             if now - last_rec > conf["RECONCILE_SEC"]:
                 other_running, last_rec = self.reconcile(), now
             self.check_endpoint()
-            stop = (HERE / "STOP").exists()
+            stop = STOP.exists()
             limit = max(0, int(conf["TARGET"]) - other_running)
             if not stop and self.endpoint_ok and self.queue and len(self.inflight) < limit and now >= self.pause_until:
                 task = self.queue.pop(0)

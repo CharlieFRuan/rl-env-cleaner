@@ -187,3 +187,20 @@ step_limit 250. Sandboxes 4 CPU, 6 GB (8 GB for JS/JVM verifiers: 686 of 2,698 t
   fetch_head=0, test_patch_already_applied=0, patch_new_files_present=0; `.build_env` (5 images) holds only
   test_command.sh; the only /logs entry is Harbor's /logs/artifacts mount. These checks don't cover the installed-copy,
   duplicate-checkout or timestamp leaks.
+- **001226 stays excluded after the resource profiling (2026-10-09)**: at 2 vCPU it timed out 6/6 and at 4 vCPU 4/4
+  (jobs/prof-r1, jobs/prof-cpu4). A 2-vCPU probe from the task image (no agent) took 17.4 min of tests alone, with both
+  cores saturated on real work (34 CPU-min, 11 s sys). The hot process is `inkscape` (pycortex quickshow renders SVG->PNG),
+  so capping BLAS/OpenMP threads doesn't help. Not worth a one-off longer timeout plus more vCPU. Canonical list of all
+  excluded tasks with reasons: excluded_tasks.tsv.
+- **Resource profiling outcome (2026-10-09)** (jobs/prof-r1 at 2 vCPU / 8 GiB / 20 GiB x4 attempts; reruns jobs/prof-cpu4 at
+  4 vCPU for 105 CPU-flagged tasks, jobs/prof-mem16 at 16 GiB for 117 tasks that OOMed at 8 GiB). Per-task spec:
+  task_resources.tsv (2,659 tasks).
+  - vCPU: 4 for every CPU-flagged task, 2 otherwise (97 tasks at 4 after exclusions, +4% vCPU). Across the flagged set
+    4 vCPU gave verifier 0.54x, trial wall 0.78x, timeouts 10 -> 4. A per-task pick isn't reliable from 4 attempts: a
+    30%-faster rule finds 34 tasks vs 17 expected from shuffled (null) splits.
+  - Memory: ceil(max memory.peak incl. page cache) + 1 GiB. Leave-one-out: 0.37% of held-out attempts would exceed the
+    limit on non-reclaimable memory. Mean 3.9 GiB (10,277 GiB total vs 21,272 at a flat 8).
+  - Excluded: 000315 (verifier hangs, times out at 2 and 4 vCPU at ~0.07 cores); 29 tasks that OOMed at 16 GiB on any
+    attempt (category oom-16g in excluded_tasks.tsv).
+  - Disk: 20 GiB for all; 001108 reached 20.0 GiB and 001540 18.4 GiB. 4 trials report ~540 GB because `/` was a
+    766 GB host filesystem rather than the quota volume, so their disk number is unmeasured.

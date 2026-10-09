@@ -43,7 +43,29 @@ class LabeledDaytonaEnv(DaytonaEnvironment):
         return caps.model_copy(update={"network_allowlist": True, "dynamic_network_policy": True})
 
     def _extra_create_fields(self) -> dict:
-        return {"labels": run_labels(), "ttl_minutes": int(os.environ.get("MIMO_TTL_MINUTES", "360"))}
+        # The org now only permits ephemeral sandboxes ("Only ephemeral sandboxes are permitted in this region");
+        # Harbor sets ephemeral only on its snapshot path, not on the image-build path we use.
+        return {"labels": run_labels(), "ttl_minutes": int(os.environ.get("MIMO_TTL_MINUTES", "360")), "ephemeral": True}
+
+    async def start(self, force_build: bool) -> None:
+        await super().start(force_build)
+        if os.environ.get("MIMO_PROFILE") == "1":
+            await self._start_profiler()
+
+    async def _start_profiler(self) -> None:
+        """Start prof_sampler.sh in the background before agent install, so the samples cover the whole trial."""
+        script = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "prof_sampler.sh")).read()
+        interval = os.environ.get("MIMO_PROFILE_INTERVAL_SEC", "1")
+        cmd = ("mkdir -p /var/lib/.mimo_prof && cat > /var/lib/.mimo_prof/sampler.sh <<'MIMO_PROF_EOF'\n" + script +
+               "\nMIMO_PROF_EOF\n"
+               f"nohup sh /var/lib/.mimo_prof/sampler.sh {interval} > /var/lib/.mimo_prof/sampler.log 2>&1 < /dev/null &\n"
+               "sleep 1; [ -s /var/lib/.mimo_prof/series.csv ] && echo PROFILER_STARTED")
+        try:
+            r = await self.exec(cmd, timeout_sec=60, user="root")
+            if "PROFILER_STARTED" not in (r.stdout or ""):
+                self.logger.warning("profiler did not start: %s %s", r.stdout, r.stderr)
+        except Exception as e:  # profiling must never fail the trial
+            self.logger.warning("profiler start failed: %r", e)
 
     def _image_sandbox_params(self, **kwargs):
         params = super()._image_sandbox_params(**kwargs)

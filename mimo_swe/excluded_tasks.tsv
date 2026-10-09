@@ -1,0 +1,41 @@
+# Tasks excluded from the MiMo-V2.6-RL-oss SWE set (eval, resource profiling, and any RL use). One per line:
+# task_id <TAB> category <TAB> reason. Categories: ungradable, broken-nop, leak-flagged, oom-16g.
+format-code-task-001226	ungradable	Verifier can't finish within its own 1800 s timeout. The untouched suite (all 24 tests in cortex/tests/test_dataset.py, not just the target test) is CPU-bound rendering: pycortex quickshow shells out to inkscape for SVG->PNG. Timed out 6/6 at 4 GB (eval), 6/6 at 2 vCPU and 4/4 at 4 vCPU (profiling, 2026-10-08/09); 17 min of tests alone at 2 vCPU with both cores saturated (34 CPU-min, 11 s sys), so thread caps don't help. Excluded rather than patched: fixing it means a longer timeout plus more vCPU for one task, or editing the tests.
+format-code-task-001597	broken-nop	Verifier passes on the untouched repo (nop agent).
+format-code-task-001225	broken-nop	Verifier passes on the untouched repo (nop agent).
+format-code-task-000195	leak-flagged	Scored solves flagged by the leak audit (report_leakadj).
+format-code-task-001397	leak-flagged	Scored solves flagged by the leak audit (report_leakadj).
+format-code-task-001427	leak-flagged	Scored solves flagged by the leak audit (report_leakadj).
+format-code-task-002517	leak-flagged	Scored solves flagged by the leak audit (report_leakadj).
+format-code-task-002607	leak-flagged	Scored solves flagged by the leak audit (report_leakadj).
+format-code-task-003058	leak-flagged	Scored solves flagged by the leak audit (report_leakadj).
+format-code-task-000315	ungradable	Verifier times out (1800 s) on 3/4 attempts at both 2 and 4 vCPU while averaging ~0.07 cores: it waits or hangs rather than computing, so more resources don't help (profiling 2026-10-09).
+format-code-task-000236	oom-16g	Out of memory even at 16 GiB on 4/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-000385	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-000435	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-000632	oom-16g	Out of memory even at 16 GiB on 4/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-000682	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-000835	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-000859	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-001109	oom-16g	Out of memory even at 16 GiB on 4/7 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-001120	oom-16g	Out of memory even at 16 GiB on 1/5 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-001315	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-001339	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-001515	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-001516	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-001698	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-001750	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002018	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002223	oom-16g	Out of memory even at 16 GiB on 3/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002280	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002318	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002319	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002331	oom-16g	Out of memory even at 16 GiB on 3/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002464	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002760	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002777	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002967	oom-16g	Out of memory even at 16 GiB on 1/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-002988	oom-16g	Out of memory even at 16 GiB on 1/5 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-003005	oom-16g	Out of memory even at 16 GiB on 4/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-003050	oom-16g	Out of memory even at 16 GiB on 2/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
+format-code-task-003060	oom-16g	Out of memory even at 16 GiB on 4/4 attempts (2 vCPU; cgroup oom_kill > 0); real peak unknown (profiling 2026-10-09).
