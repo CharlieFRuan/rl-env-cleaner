@@ -32,6 +32,35 @@ OWNER = "charlieruan"
 PURPOSE = "mimo-harbor-eval"
 
 
+def _route_object_storage_through_proxy() -> None:
+    """Send the Daytona SDK's S3 build-context uploads through HTTPS_PROXY when one is set.
+
+    Clusters whose compute nodes reach the internet only through a proxy (JSC JUPITER) need this: the SDK
+    uploads each image's build context with obstore (Rust/reqwest), constructs the S3Store inside
+    `isolated_env()` (os.environ cleared) and passes no `proxy_url`, so the upload dials S3 directly and
+    fails with "tcp connect error". obstore supports `client_options["proxy_url"]`; set it here.
+    """
+    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+    if not proxy:
+        return
+    from daytona._async import object_storage as async_os
+    from daytona._sync import object_storage as sync_os
+
+    for mod in (async_os, sync_os):
+        s3store = mod.S3Store
+        if getattr(s3store, "_mimo_proxied", False):
+            continue
+
+        def proxied(*args, client_options=None, _s3store=s3store, **kwargs):
+            return _s3store(*args, client_options={"proxy_url": proxy, **(client_options or {})}, **kwargs)
+
+        proxied._mimo_proxied = True
+        mod.S3Store = proxied
+
+
+_route_object_storage_through_proxy()
+
+
 def run_labels() -> dict[str, str]:
     return {"owner": OWNER, "run": os.environ.get("MIMO_RUN_ID", "mimo-qwen36"), "purpose": PURPOSE}
 
