@@ -78,6 +78,8 @@ export RAY_ADDRESS=$HEAD_IP:$RAY_PORT USE_VENV=1 NUM_NODES=${#NODES[@]} NUM_GPUS
 export NUM_ENGINES=${NUM_ENGINES:-$((2 * NUM_NODES))} TP_SIZE=${TP_SIZE:-2}   # 2 vLLM engines x TP 2 per 4-GPU node
 export GROUP_SIZE=${GROUP_SIZE:-16} TRAIN_PATHS=${TRAIN_PATHS:-final} LR=${LR:-5.0e-6} EPOCHS=${EPOCHS:-35}
 export CKPT_INTERVAL=${CKPT_INTERVAL:-5} SKYCAP_PORT=11500
+# Context parallelism: 128k-token packed microbatches do not fit in 95 GB at CP 1 (log-prob logits alone are ~45 GB).
+export MEGATRON_CP=${MEGATRON_CP:-2}
 cd $REPO
 # DEBUG_HOLD=1: if the driver fails, keep the allocation (and the Ray cluster) so the run can be fixed and relaunched
 # without requeueing: `srun --jobid=$SLURM_JOB_ID --overlap -N1 -n1 -c 288 -w <head node> bash $WORK/jobs/mimo_relaunch.sh <run_dir>`.
