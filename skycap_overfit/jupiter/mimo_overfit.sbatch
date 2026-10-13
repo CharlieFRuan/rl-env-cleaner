@@ -55,7 +55,9 @@ RAY_PORT=6390 RAY_TMP=/tmp/ray_$SLURM_JOB_ID
 COMMON="--num-gpus=4 --temp-dir=$RAY_TMP --dashboard-agent-listen-port=52370 --metrics-export-port=8095 --runtime-env-agent-port=8096"
 
 echo "nodes: ${NODES[*]} ips: ${ips[*]} head $HEAD_IP relay $RELAY_HOST via $RELAY_LOGIN_NODE"
-trap 'mkdir -p $RUN_DIR/ray_logs/$SLURM_JOB_ID; for n in ${NODES[@]}; do srun --overlap -N1 -n1 -w $n --cpu-bind=none bash -c "cp -r $RAY_TMP/session_latest/logs $RUN_DIR/ray_logs/$SLURM_JOB_ID/\$(hostname -s)" 2>/dev/null; done' EXIT
+# On exit: keep Ray's logs (they live in node-local /tmp), then stop the `ray start` steps (they outlive this script when
+# it runs as a step inside a held allocation).
+trap 'mkdir -p $RUN_DIR/ray_logs/$SLURM_JOB_ID; for n in ${NODES[@]}; do srun --overlap -N1 -n1 -w $n --cpu-bind=none bash -c "cp -r $RAY_TMP/session_latest/logs $RUN_DIR/ray_logs/$SLURM_JOB_ID/\$(hostname -s)" 2>/dev/null; done; kill $(jobs -p) 2>/dev/null' EXIT
 
 # --- private Ray cluster: head on node 0, workers on the rest (one srun step per node, kept alive with --block) ---
 srun --overlap -N1 -n1 -w ${NODES[0]} --cpu-bind=none ray start --head --block --port=$RAY_PORT --include-dashboard=false \
