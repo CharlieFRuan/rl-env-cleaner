@@ -32,6 +32,10 @@ settings still need to expose the necessary host capabilities.
   in this session.
 - GitHub connector can enumerate the repository branches. It reports main,
   qwen36-b200-run, skycap-overfit, and jupiter.
+- Connector Git tree creation returned HTTP 403, `Resource not accessible by
+  integration`. Progress is committed on the local branch. Push with the existing
+  host GitHub authentication once shell networking is available; do not assume
+  the read-capable connector has write permission.
 - Qwen config exists at `/mnt/local_storage/charlieruan/hf/Qwen3.6-35B-A3B`.
 - GLM download has completed since the handoff: all 62 indexed safetensors shards
   exist at `/mnt/local_storage/charlieruan/hf/GLM-5.3-Flash`, totaling
