@@ -4,15 +4,21 @@ Branch: `cyber-b200-run`, based on `origin/qwen36-b200-run` (`b372d71`).
 Worktree: `/home/charlieruan/mimo/rl-env-cleaner-cyber`.
 The original `skycap-overfit` checkout and its modified janitor log were left intact.
 
-## Scope pending direct confirmation
+## Scope corrected directly by the user
 
-`~/mimo/HANDOFF_1023.md` records the user's subsequent decision as 1,000 cyber
-tasks, three independent attempts per model, Qwen3.6-35B-A3B followed by
-GLM-5.3-Flash FP8, with mini-swe-agent. No separately released mini benchmark
-was identified in the handoff. This is an evaluation of the published training
-tasks, not established evidence of a held-out MiMo Cyber Bench result.
-The user has been asked to confirm this scope and requested information gathering
-and early access questions before overnight execution.
+The user clarified in this session: **eight attempts per training task per model;
+three attempts per benchmark task per model**. The handoff's combined three-pass
+plan was incorrect and is superseded.
+
+Training: all 1,000 cyber tasks, Qwen3.6-35B-A3B followed by GLM-5.3-Flash FP8,
+with mini-swe-agent: 8,000 attempts per model, 16,000 total before infra retries.
+Benchmark: separate MiMo Cyber Bench (mini), three attempts per model. Its location
+is still unresolved; the user has been asked for a link or local path while public
+discovery continues. Do not label the training set as benchmark results.
+
+The user requested information gathering and early access questions before
+overnight execution, then explicitly authorized full control. Session execution
+settings still need to expose the necessary host capabilities.
 
 ## Verified locally
 
@@ -52,8 +58,10 @@ or gcloud login are broken. They establish that this execution context cannot
 perform those live checks. No model servers, Ray processes, sandboxes, downloads,
 or evaluation trials have been launched in this continuation.
 
-The user has been asked for host execution with network/GPU access or an approved
-remote execution connection. No additional credential appears necessary yet.
+The user authorized full control and was given the documented Full access
+permissions-picker instructions for desktop/IDE or CLI `/permissions`. Recheck
+capabilities after the user applies the change. No additional credential appears
+necessary yet. The agent has not changed the session's own permissions.
 
 ## Grading setup missing from the original suggested steps
 
